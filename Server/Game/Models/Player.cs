@@ -14,6 +14,8 @@ public class Player
     public bool HasPendingAction { get; set; }
     public int ExtraTurns { get; set; }
     public bool IsProtected { get; set; }
+    public bool IsAttacked { get; set; } = false; // Атакован ли игрок
+    public int TurnsRemaining { get; set; } = 1;  // Сколько ходов осталось
 
     [JsonIgnore]
     public bool HasDefuseCard => Hand.Any(c => c.Type == CardType.Defuse);
@@ -123,5 +125,13 @@ public class Player
 
             yield return indices.Select(idx => cards[idx]).ToList();
         }
+    }
+
+    // Метод для сброса состояния атаки
+    public void ResetAttackState()
+    {
+        IsAttacked = false;
+        TurnsRemaining = 1;
+        ExtraTurns = 0;
     }
 }

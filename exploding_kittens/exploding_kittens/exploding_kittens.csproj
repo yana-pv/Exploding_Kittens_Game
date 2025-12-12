@@ -1,0 +1,173 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{F90E2E7F-783A-45C6-BB24-F6A9E13DD706}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>exploding_kittens</RootNamespace>
+    <AssemblyName>exploding_kittens</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <WarningLevel>4</WarningLevel>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xaml">
+      <RequiredTargetFramework>4.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page Include="Dialogs\ComboSelectionDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Dialogs\TargetSelectionDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="GameWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="MainWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Dialogs\BoolToCurrentPlayerConverter.cs" />
+    <Compile Include="ClientModels\ClientCardDto.cs" />
+    <Compile Include="ClientModels\GameStateDto.cs" />
+    <Compile Include="ClientModels\PlayerHandDto.cs" />
+    <Compile Include="Dialogs\ComboSelectionDialog.xaml.cs">
+      <DependentUpon>ComboSelectionDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\TargetSelectionDialog.xaml.cs">
+      <DependentUpon>TargetSelectionDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="GameSettings.cs" />
+    <Compile Include="GameWindow.xaml.cs">
+      <DependentUpon>GameWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="MainWindow.xaml.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Networking\NetworkClient.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <None Include="packages.config" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="photo\attack1.png" />
+    <Resource Include="photo\attack2.png" />
+    <Resource Include="photo\attack3.png" />
+    <Resource Include="photo\attack4.png" />
+    <Resource Include="photo\borodach.png" />
+    <Resource Include="photo\borrow1.png" />
+    <Resource Include="photo\borrow2.png" />
+    <Resource Include="photo\borrow3.png" />
+    <Resource Include="photo\borrow4.png" />
+    <Resource Include="photo\defuse1.png" />
+    <Resource Include="photo\defuse2.png" />
+    <Resource Include="photo\defuse3.png" />
+    <Resource Include="photo\defuse4.png" />
+    <Resource Include="photo\defuse5.png" />
+    <Resource Include="photo\defuse6.png" />
+    <Resource Include="photo\exploding_kitten1.png" />
+    <Resource Include="photo\exploding_kitten2.png" />
+    <Resource Include="photo\exploding_kitten3.png" />
+    <Resource Include="photo\exploding_kitten4.png" />
+    <Resource Include="photo\future1.png" />
+    <Resource Include="photo\future2.png" />
+    <Resource Include="photo\future3.png" />
+    <Resource Include="photo\future4.png" />
+    <Resource Include="photo\future5.png" />
+    <Resource Include="photo\no1.png" />
+    <Resource Include="photo\no2.png" />
+    <Resource Include="photo\no3.png" />
+    <Resource Include="photo\no4.png" />
+    <Resource Include="photo\no5.png" />
+    <Resource Include="photo\potatocat.png" />
+    <Resource Include="photo\rainbowcat.png" />
+    <Resource Include="photo\Shirt.png" />
+    <Resource Include="photo\shuffle1.png" />
+    <Resource Include="photo\shuffle2.png" />
+    <Resource Include="photo\shuffle3.png" />
+    <Resource Include="photo\shuffle4.png" />
+    <Resource Include="photo\skip1.png" />
+    <Resource Include="photo\skip2.png" />
+    <Resource Include="photo\skip3.png" />
+    <Resource Include="photo\skip4.png" />
+    <Resource Include="photo\tacocat.png" />
+    <Resource Include="photo\watermelon.png" />
+    <Resource Include="photo\Рубашка.png" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

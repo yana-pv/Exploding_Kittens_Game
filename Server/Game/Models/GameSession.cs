@@ -148,8 +148,11 @@ public class GameSession
         if (!force && !TurnManager.TurnEnded)
         {
             // Ход еще не завершен
+            Console.WriteLine($"DEBUG NextPlayer: ход еще не завершен, force={force}");
             return;
         }
+
+        Console.WriteLine($"DEBUG NextPlayer: переходим от {CurrentPlayer?.Name}");
 
         int attempts = 0;
         do
@@ -157,6 +160,8 @@ public class GameSession
             CurrentPlayerIndex = (CurrentPlayerIndex + 1) % Players.Count;
             CurrentPlayer = Players[CurrentPlayerIndex];
             attempts++;
+
+            Console.WriteLine($"DEBUG NextPlayer: пытаемся игрока {CurrentPlayer.Name}, alive={CurrentPlayer.IsAlive}");
 
             if (attempts > Players.Count)
             {
@@ -167,6 +172,7 @@ public class GameSession
         while (!CurrentPlayer.IsAlive);
 
         TurnsPlayed++;
+        Console.WriteLine($"DEBUG NextPlayer: теперь ходит {CurrentPlayer.Name}, ExtraTurns={CurrentPlayer.ExtraTurns}");
 
         // Сброс состояния хода для нового игрока
         // TurnManager сам сбросится в CompleteTurnAsync()
@@ -248,29 +254,47 @@ public class GameSession
     // Новый метод для обработки карты "Атаковать"
     public void ApplyAttack(Player attacker, Player? target = null)
     {
-        // Атака заканчивает ход текущего игрока БЕЗ взятия карты
+        Console.WriteLine($"DEBUG ApplyAttack: Игрок {attacker.Name} атакует");
+
+        // 1. ТЕКУЩИЙ ХОД ЗАВЕРШАЕТСЯ БЕЗ ВЗЯТИЯ КАРТЫ
         TurnManager.ForceEndTurn();
+        TurnManager.CardDrawn(); // Помечаем, что карта взята (чтобы не требовало draw)
         NeedsToDrawCard = false;
 
-        // Если указана цель, она получает дополнительный ход
-        if (target != null && target.IsAlive)
+        // 2. Определяем СЛЕДУЮЩЕГО игрока (по умолчанию следующий по порядку)
+        Player? attackTarget = target;
+        if (attackTarget == null || !attackTarget.IsAlive)
         {
-            target.ExtraTurns += 2;
-            Log($"{attacker.Name} атаковал {target.Name}! {target.Name} ходит дважды.");
-        }
-        else
-        {
-            // Следующий игрок ходит дважды
-            var nextPlayer = GetNextAlivePlayer();
-            if (nextPlayer != null)
+            // Находим следующего живого игрока
+            var nextIndex = CurrentPlayerIndex;
+            var attempts = 0;
+
+            do
             {
-                nextPlayer.ExtraTurns += 2;
-                Log($"{attacker.Name} атаковал! {nextPlayer.Name} ходит дважды.");
+                nextIndex = (nextIndex + 1) % Players.Count;
+                attackTarget = Players[nextIndex];
+                attempts++;
+
+                if (attempts > Players.Count)
+                {
+                    Log("Нет живых игроков для атаки!");
+                    return;
+                }
             }
+            while (!attackTarget.IsAlive);
         }
 
-        // Сразу переходим к следующему игроку
-        NextPlayer(true);
+        // 3. ЦЕЛЬ ПОЛУЧАЕТ +1 дополнительный ход (всего будет ходить дважды)
+        // Важно: не ExtraTurns += 2, а настраиваем специальный флаг
+        attackTarget.ExtraTurns = 1; // Будет ходить на 1 раз больше
+
+        Log($"⚔️ {attacker.Name} атаковал! {attackTarget.Name} ходит дважды.");
+
+        // 4. НЕ переходим к следующему игроку здесь
+        // Это сделает TurnManager.CompleteTurnAsync() в основном методе
+
+        // 5. Устанавливаем специальный флаг для атакованного игрока
+        attackTarget.HasPendingAction = true; // или attackTarget.IsAttacked = true
     }
 
     private Player? GetNextAlivePlayer()

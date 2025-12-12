@@ -1,0 +1,47 @@
+﻿<!-- ComboSelectionDialog.xaml -->
+<Window x:Class="exploding_kittens.Dialogs.ComboSelectionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Выбор комбо" 
+        WindowStyle="ToolWindow"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner">
+
+    <StackPanel Margin="20" MinWidth="300">
+        <TextBlock Text="Выберите карты для комбо:" 
+                   Margin="0,0,0,10"
+                   FontWeight="Bold"/>
+
+        <!-- Добавьте этот ListBox с правильным именем -->
+        <ListBox x:Name="CardsListBox"
+                 MaxHeight="200"
+                 SelectionMode="Multiple">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{Binding ImagePath}" 
+                               Width="40" Height="56" 
+                               Margin="5,0"/>
+                        <TextBlock Text="{Binding Name}" 
+                                   VerticalAlignment="Center"
+                                   Margin="10,0"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Margin="0,20,0,0">
+            <Button Content="Отмена"
+                    Click="CancelButton_Click"
+                    Margin="0,0,10,0"
+                    Padding="15,5"/>
+            <Button Content="Выбрать"
+                    Click="SelectButton_Click"
+                    Padding="15,5"
+                    IsDefault="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

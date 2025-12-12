@@ -53,8 +53,12 @@ public class DrawCardHandler : ICommandHandler
             var drawnCard = session.GameDeck.Draw();
             await session.BroadcastMessage($"{player.Name} берет карту из колоды.");
 
+            Console.WriteLine($"DEBUG DrawCard: игрок {player.Name} взял карту, ExtraTurns до={player.ExtraTurns}");
+
             // Регистрируем взятие карты
             session.TurnManager.CardDrawn();
+
+            Console.WriteLine($"DEBUG DrawCard: после CardDrawn(), ExtraTurns после={player.ExtraTurns}");
 
             if (drawnCard.Type == CardType.ExplodingKitten)
             {
@@ -67,6 +71,7 @@ public class DrawCardHandler : ICommandHandler
                 await player.Connection.SendPlayerHand(player);
 
                 // ВАЖНО: Автоматически завершаем ход после взятия карты
+                Console.WriteLine($"DEBUG DrawCard: вызываем CompleteTurnAsync()");
                 await session.TurnManager.CompleteTurnAsync();
 
                 if (session.State != GameState.GameOver && session.CurrentPlayer != null)

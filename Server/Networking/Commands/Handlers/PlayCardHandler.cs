@@ -213,18 +213,60 @@ public class PlayCardHandler : ICommandHandler
             session.State = GameState.PlayerTurn;
 
             // Атака отменена - игрок продолжает ход
+            session.TurnManager.ResetSkipAttackFlags();
+
             await player.Connection.SendMessage("Атака отменена! Продолжайте ваш ход.");
             return;
         }
 
-        // Атака успешна - заканчиваем ход БЕЗ взятия карты
-        await session.BroadcastMessage($"⚔️ {player.Name} атаковал! Ход заканчивается.");
+        // Проверяем, является ли игрок жертвой предыдущей атаки
+        bool isCounterAttack = player.ExtraTurns > 0;
 
-        // Применяем эффект атаки
-        await ApplyAttackEffect(session, player, target);
+        if (isCounterAttack)
+        {
+            // Контратака: жертва атакует в ответ
+            await session.BroadcastMessage($"⚔️ {player.Name} контратакует! Ход заканчивается.");
+
+            // Находим следующего игрока (после контратакующего)
+            var nextPlayer = FindNextAlivePlayer(session, player);
+            if (nextPlayer != null)
+            {
+                nextPlayer.ExtraTurns = 1;
+                await session.BroadcastMessage($"⚔️ {nextPlayer.Name} ходит дважды из-за контратаки!");
+            }
+        }
+        else
+        {
+            // Обычная атака
+            await session.BroadcastMessage($"⚔️ {player.Name} атаковал! Ход заканчивается.");
+
+            // Применяем эффект атаки
+            await ApplyAttackEffect(session, player, target);
+        }
 
         PlayNopeHandler.CleanupNopeWindow(session.Id);
         session.State = GameState.PlayerTurn;
+    }
+
+    private Player? FindNextAlivePlayer(GameSession session, Player fromPlayer)
+    {
+        var players = session.Players;
+        var startIndex = players.IndexOf(fromPlayer);
+        var attempts = 0;
+
+        do
+        {
+            startIndex = (startIndex + 1) % players.Count;
+            var player = players[startIndex];
+            attempts++;
+
+            if (attempts > players.Count)
+                return null;
+
+            if (player.IsAlive)
+                return player;
+        }
+        while (true);
     }
 
     private async Task ApplyAttackEffect(GameSession session, Player attacker, Player? target)
@@ -252,13 +294,14 @@ public class PlayCardHandler : ICommandHandler
             while (!attackTarget.IsAlive);
         }
 
-        // Целевой игрок получает +1 дополнительный ход (всего будет ходить дважды)
-        attackTarget.ExtraTurns += 1;
+        // Помечаем цель как атакованную
+        attackTarget.IsAttacked = true;
+        attackTarget.ExtraTurns = 1; // Будет ходить на 1 раз больше
+
         await session.BroadcastMessage($"{attackTarget.Name} ходит дважды из-за атаки!");
 
-        // НЕ переходим к следующему игроку здесь!
-        // Это сделает TurnManager.CompleteTurnAsync() в основном методе
-        // session.NextPlayer(); // УБРАТЬ ЭТУ СТРОЧКУ
+        // Важно: НЕ вызываем session.NextPlayer() здесь
+        // Переход произойдет в TurnManager.CompleteTurnAsync()
     }
 
     private async Task HandleSkip(GameSession session, Player player, Card card)
