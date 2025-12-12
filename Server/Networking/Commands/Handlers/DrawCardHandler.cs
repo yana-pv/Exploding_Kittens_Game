@@ -9,8 +9,7 @@ namespace Server.Networking.Commands.Handlers;
 [Command(Command.DrawCard)]
 public class DrawCardHandler : ICommandHandler
 {
-    public async Task Invoke(Socket sender, GameSessionManager sessionManager, // <-- Изменено
-        byte[]? payload = null, CancellationToken ct = default)
+    public async Task Invoke(Socket sender, GameSessionManager sessionManager, byte[]? payload = null, CancellationToken ct = default)
     {
         if (payload == null || payload.Length == 0)
         {
@@ -56,7 +55,6 @@ public class DrawCardHandler : ICommandHandler
 
             // Регистрируем взятие карты
             session.TurnManager.CardDrawn();
-            session.NeedsToDrawCard = false;
 
             if (drawnCard.Type == CardType.ExplodingKitten)
             {
@@ -68,12 +66,13 @@ public class DrawCardHandler : ICommandHandler
                 await player.Connection.SendMessage($"Вы взяли: {drawnCard.Name}");
                 await player.Connection.SendPlayerHand(player);
 
-                // Автоматически завершаем ход после взятия карты
-                session.NextPlayer();
-                if (session.State != GameState.GameOver)
+                // ВАЖНО: Автоматически завершаем ход после взятия карты
+                await session.TurnManager.CompleteTurnAsync();
+
+                if (session.State != GameState.GameOver && session.CurrentPlayer != null)
                 {
-                    await session.BroadcastMessage($"Ходит {session.CurrentPlayer!.Name}");
-                    await session.CurrentPlayer!.Connection.SendMessage("Ваш ход!");
+                    await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer.Name}");
+                    await session.CurrentPlayer.Connection.SendMessage("Ваш ход! Вы можете сыграть карту или взять карту из колоды.");
                 }
             }
 
@@ -124,6 +123,10 @@ public class DrawCardHandler : ICommandHandler
         {
             await HandlePlayerElimination(session, player, kittenCard);
         }
+
+        // ВАЖНО: После обработки Взрывного Котенка ход НЕ переходит автоматически
+        // Если игрок обезвредил - он продолжает ход
+        // Если игрок выбыл - переход происходит в HandlePlayerElimination
     }
 
     private async Task HandlePlayerElimination(GameSession session, Player player, Card kittenCard)
@@ -131,10 +134,13 @@ public class DrawCardHandler : ICommandHandler
         session.EliminatePlayer(player);
         await session.BroadcastMessage($"{player.Name} выбывает из игры!");
 
-        session.NextPlayer();
-        if (session.State != GameState.GameOver)
+        // Переход к следующему игроку через TurnManager
+        await session.TurnManager.CompleteTurnAsync();
+
+        if (session.State != GameState.GameOver && session.CurrentPlayer != null)
         {
-            await session.BroadcastMessage($"Ходит {session.CurrentPlayer!.Name}");
+            await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer.Name}");
+            await session.CurrentPlayer.Connection.SendMessage("Ваш ход! Вы можете сыграть карту или взять карту из колоды.");
         }
     }
 }

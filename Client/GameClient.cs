@@ -155,13 +155,27 @@ public class GameClient
                     DisplayHelp();
                     break;
 
+                case "favor":
+                    await HandleFavorCommand(parts);
+                    break;
+
+                case "give": // Альтернативная команда для favor
+                    await HandleGiveCommand(parts);
+                    break;
+
+                case "choose": // Альтернативное название для give
+                    await HandleGiveCommand(parts); // или HandleChooseCommand если он существует
+                    break;
+
                 case "exit":
                 case "quit":
                     Running = false;
                     break;
+
                 case "end":
                     await HandleEndTurnCommand(parts);
                     break;
+
                 default:
                     Console.WriteLine($"Неизвестная команда: {command}");
                     break;
@@ -225,7 +239,8 @@ public class GameClient
 
         if (parts.Length < 2 || !int.TryParse(parts[1], out var cardIndex))
         {
-            Console.WriteLine("Использование: play [номер_карты] [целевой_игрок]");
+            Console.WriteLine("Использование: play [номер_карты] [ID_целевого_игрока]");
+            Console.WriteLine("Пример: play 3 550e8400-e29b-41d4-a716-446655440000");
             DisplayHand();
             return;
         }
@@ -237,11 +252,14 @@ public class GameClient
         }
 
         var card = Hand[cardIndex];
-        string? targetPlayerId = null;
+        string? targetPlayerId = parts.Length > 2 ? parts[2] : null;
 
-        if (parts.Length > 2)
+        // Проверим, что targetPlayerId - это Guid
+        if (targetPlayerId != null && !Guid.TryParse(targetPlayerId, out _))
         {
-            targetPlayerId = parts[2];
+            Console.WriteLine("ID целевого игрока должен быть в формате GUID!");
+            Console.WriteLine("Пример: 550e8400-e29b-41d4-a716-446655440000");
+            return;
         }
 
         await _helper.SendPlayCard(SessionId.Value, PlayerId, cardIndex, targetPlayerId);
@@ -487,24 +505,50 @@ public class GameClient
         Console.WriteLine("  start                 - Начать игру (если создатель)");
         Console.WriteLine("  play [номер] [цель]   - Сыграть карту");
         Console.WriteLine("  draw                  - Взять карту из колоды");
-        Console.WriteLine("  end                   - Завершить ход (если сыграли карты)");
         Console.WriteLine("  combo 2 [1,2] [цель]  - Сыграть комбо (2 одинаковые или с одинаковой иконкой)");
         Console.WriteLine("  combo 3 [1,2,3] [цель] - Сыграть комбо (3 одинаковые или с одинаковой иконкой)");
         Console.WriteLine("  combo 5 [1,2,3,4,5]   - Сыграть комбо (5 разных с разными иконками)");
         Console.WriteLine("  nope                  - Сыграть карту НЕТ");
         Console.WriteLine("  defuse [позиция]      - Обезвредить котенка");
+        Console.WriteLine("  give [номер]          - Отдать карту при запросе 'Одолжения'");
         Console.WriteLine("  hand                  - Показать карты на руке");
         Console.WriteLine("  state                 - Показать состояние игры");
         Console.WriteLine("  players               - Показать игроков");
         Console.WriteLine("  help                  - Показать эту справку");
         Console.WriteLine("  exit                  - Выйти из игры");
         Console.WriteLine();
-        Console.WriteLine("Правила карт:");
-        Console.WriteLine("  • Заглянуть в будущее - показывает 3 верхние карты");
+        Console.WriteLine("ПРАВИЛА ХОДА:");
+        Console.WriteLine("  • Можно играть любое количество карт за ход");
+        Console.WriteLine("  • В конце хода ОБЯЗАТЕЛЬНО взять карту из колоды (draw)");
+        Console.WriteLine("  • Исключения:");
+        Console.WriteLine("      - Карта 'Пропустить' завершает ход БЕЗ взятия карты");
+        Console.WriteLine("      - Карта 'Атаковать' завершает ход БЕЗ взятия карты");
+        Console.WriteLine("      - Следующий игрок после 'Атаковать' ходит ДВАЖДЫ");
+        Console.WriteLine("  • После взятия карты (draw) ход автоматически переходит следующему");
+        Console.WriteLine();
+        Console.WriteLine("КАРТЫ:");
+        Console.WriteLine("  • Заглянуть в будущее - показывает 3 верхние карты колоды");
         Console.WriteLine("  • Атаковать - заканчивает ваш ход, следующий игрок ходит дважды");
-        Console.WriteLine("  • Пропустить - заканчивает ход (все равно нужно взять карту)");
-        Console.WriteLine("  • Можно играть несколько карт за ход");
-        Console.WriteLine("  • В конце хода ОБЯЗАТЕЛЬНО взять карту (draw или end если не взяли)");
+        Console.WriteLine("  • Пропустить - заканчивает ход без взятия карты");
+        Console.WriteLine("  • Нет - отменяет действие любой карты (кроме Взрывного Котенка и Обезвредить)");
+        Console.WriteLine("  • Одолжение - берет карту у другого игрока (у него 30 сек на выбор)");
+        Console.WriteLine("  • Перемешать - перемешивает колоду");
+        Console.WriteLine("  • Обезвредить - спасает от Взрывного Котенка");
+        Console.WriteLine("  • Карты котиков - играются только в комбо");
+        Console.WriteLine();
+        Console.WriteLine("КОМБО (карты котиков):");
+        Console.WriteLine("  • 2 одинаковые - взять случайную карту у другого игрока");
+        Console.WriteLine("  • 3 одинаковые - запросить конкретную карту у другого игрока");
+        Console.WriteLine("  • 5 разных - взять любую карту из колоды сброса");
+        Console.WriteLine();
+        Console.WriteLine("ПРИМЕРЫ КОМАНД:");
+        Console.WriteLine("  create Иван             - Создать игру");
+        Console.WriteLine("  join 123abc Петр        - Присоединиться к игре");
+        Console.WriteLine("  play 0                  - Сыграть первую карту");
+        Console.WriteLine("  play 1 550e8400...      - Сыграть карту на игрока с ID");
+        Console.WriteLine("  draw                    - Взять карту из колоды");
+        Console.WriteLine("  give 2                  - Отдать третью карту при 'Одолжении'");
+        Console.WriteLine("  combo 2 0,1 550e8400... - Сыграть комбо из 2 карт");
         Console.WriteLine();
     }
 
@@ -533,7 +577,11 @@ public class GameClient
         foreach (var player in OtherPlayers)
         {
             var status = player.IsAlive ? "жив" : "выбыл";
-            Console.WriteLine($"{player.Name} ({status}): {player.CardCount} карт");
+            var current = player.IsCurrentPlayer ? " ← сейчас ходит" : "";
+            Console.WriteLine($"{player.Name} ({status}){current}");
+            Console.WriteLine($"  ID: {player.Id}");
+            Console.WriteLine($"  Карт: {player.CardCount}");
+            Console.WriteLine();
         }
         Console.WriteLine("==============");
     }
@@ -603,5 +651,102 @@ public class GameClient
 
         await _helper.SendEndTurn(SessionId.Value, PlayerId);
         Console.WriteLine("Завершение хода...");
+    }
+
+    private async Task HandleChooseCommand(string[] parts)
+    {
+        if (!SessionId.HasValue)
+        {
+            Console.WriteLine("Вы не в игре.");
+            return;
+        }
+
+        if (parts.Length < 2 || !int.TryParse(parts[1], out var cardIndex))
+        {
+            Console.WriteLine("Использование: choose [номер_карты]");
+            Console.WriteLine("Или: give [номер_карты]");
+            return;
+        }
+
+        // Отправляем выбор карты серверу
+        await _helper.SendChooseCard(SessionId.Value, PlayerId, cardIndex);
+        Console.WriteLine($"Отдаем карту #{cardIndex}");
+    }
+
+    private async Task HandleFavorCommand(string[] parts)
+    {
+        if (!SessionId.HasValue)
+        {
+            Console.WriteLine("Вы не в игре.");
+            return;
+        }
+
+        if (parts.Length < 4)
+        {
+            Console.WriteLine("❌ Использование: favor [ID_игры] [ваш_ID] [номер_карты]");
+            Console.WriteLine($"📋 Пример: favor {SessionId.Value} {PlayerId} 0");
+            return;
+        }
+
+        if (!Guid.TryParse(parts[1], out var gameId) || gameId != SessionId.Value)
+        {
+            Console.WriteLine("❌ Неверный ID игры");
+            return;
+        }
+
+        if (!Guid.TryParse(parts[2], out var playerId) || playerId != PlayerId)
+        {
+            Console.WriteLine("❌ Неверный ваш ID");
+            return;
+        }
+
+        if (!int.TryParse(parts[3], out var cardIndex))
+        {
+            Console.WriteLine("❌ Неверный номер карты");
+            DisplayHand();
+            return;
+        }
+
+        if (cardIndex < 0 || cardIndex >= Hand.Count)
+        {
+            Console.WriteLine($"❌ Неверный номер карты! У вас {Hand.Count} карт (0-{Hand.Count - 1})");
+            DisplayHand();
+            return;
+        }
+
+        var card = Hand[cardIndex];
+        Console.WriteLine($"📤 Отдаю карту #{cardIndex}: {card.Name}");
+
+        await _helper.SendFavorResponse(gameId, playerId, cardIndex);
+    }
+
+    private async Task HandleGiveCommand(string[] parts)
+    {
+        if (!SessionId.HasValue)
+        {
+            Console.WriteLine("Вы не в игре.");
+            return;
+        }
+
+        if (parts.Length < 2 || !int.TryParse(parts[1], out var cardIndex))
+        {
+            Console.WriteLine("❌ Использование: give [номер_карты]");
+            Console.WriteLine($"💡 Или используйте: favor {SessionId.Value} {PlayerId} [номер_карты]");
+            DisplayHand();
+            return;
+        }
+
+        if (cardIndex < 0 || cardIndex >= Hand.Count)
+        {
+            Console.WriteLine($"❌ Неверный номер карты! У вас {Hand.Count} карт (0-{Hand.Count - 1})");
+            DisplayHand();
+            return;
+        }
+
+        var card = Hand[cardIndex];
+        Console.WriteLine($"📤 Отдаю карту #{cardIndex}: {card.Name}");
+
+        // Используем сокращенную команду (требует SessionId и PlayerId)
+        await _helper.SendFavorResponse(SessionId.Value, PlayerId, cardIndex);
     }
 }

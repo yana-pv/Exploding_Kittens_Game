@@ -16,6 +16,8 @@ public enum Command : byte
     TargetPlayer = 0x23,
     PlayNope = 0x24,
     PlayDefuse = 0x25,
+    PlayFavor = 0x26, // Новая команда для ответа на Favor
+
 
     // Информационные
     GetGameState = 0x30,

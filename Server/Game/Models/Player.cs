@@ -25,6 +25,10 @@ public class Player
     {
         Hand.Add(card);
         Hand.Sort((a, b) => a.Type.CompareTo(b.Type));
+
+        // Если есть CardCounter, обновляем его
+        // (Этот код будет работать, если CardCounter передается в Player)
+        // Или обновление делается в GameSession при раздаче
     }
 
     public Card RemoveCard(CardType type)

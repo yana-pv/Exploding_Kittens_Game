@@ -4,58 +4,78 @@ namespace Server.Game.Services;
 
 public class DeckInitializer
 {
-    public static List<Card> CreateDeckForPlayers(int playerCount)
+    public static (List<Card> deck, List<List<Card>> playerHands) CreateGameSetup(int playerCount)
     {
-        var cards = new List<Card>();
+        if (playerCount < 2 || playerCount > 5)
+            throw new ArgumentException("Поддерживается 2-5 игроков");
 
-        // Проверка на максимальное количество игроков
-        if (playerCount > 5)
+        var random = new Random();
+
+        // ШАГ 1: Создаем колоду БЕЗ Взрывных Котят и Обезвредить
+        var deckWithoutExplosives = new List<Card>();
+
+        AddCards(deckWithoutExplosives, CardType.Nope, 5);
+        AddCards(deckWithoutExplosives, CardType.Attack, 4);
+        AddCards(deckWithoutExplosives, CardType.Skip, 4);
+        AddCards(deckWithoutExplosives, CardType.Favor, 4);
+        AddCards(deckWithoutExplosives, CardType.Shuffle, 4);
+        AddCards(deckWithoutExplosives, CardType.SeeTheFuture, 5);
+
+        AddCards(deckWithoutExplosives, CardType.RainbowCat, 4);
+        AddCards(deckWithoutExplosives, CardType.BeardCat, 4);
+        AddCards(deckWithoutExplosives, CardType.PotatoCat, 4);
+        AddCards(deckWithoutExplosives, CardType.WatermelonCat, 4);
+        AddCards(deckWithoutExplosives, CardType.TacoCat, 4);
+
+        // Перемешиваем
+        Shuffle(deckWithoutExplosives, random);
+
+        // ШАГ 2: Раздаем по 4 карты каждому игроку
+        var playerHands = new List<List<Card>>();
+        for (int i = 0; i < playerCount; i++)
         {
-            throw new InvalidOperationException(
-                "Для более 5 игроков нужно объединять несколько колод. " +
-                "В этой реализации поддерживается до 5 игроков.");
-        }
-
-        // 1. ВЗРЫВНЫЕ КОТЯТА: всегда 4 карты в игре
-        // Но в колоду кладем на 1 меньше, чем игроков
-        int explodingKittensInDeck = playerCount - 1;
-        AddCards(cards, CardType.ExplodingKitten, explodingKittensInDeck);
-
-        // 2. ОБЕЗВРЕДИТЬ: всегда 6 карт в игре
-        // Раздаем по 1 каждому игроку, остальные в колоду
-        int defuseInDeck = 6 - playerCount; // Остается в колоде
-        if (defuseInDeck < 0) defuseInDeck = 0;
-
-        AddCards(cards, CardType.Defuse, defuseInDeck);
-
-        // 3. Остальные карты (полная колода)
-        AddCards(cards, CardType.Nope, 5);
-        AddCards(cards, CardType.Attack, 4);
-        AddCards(cards, CardType.Skip, 4);
-        AddCards(cards, CardType.Favor, 4);
-        AddCards(cards, CardType.Shuffle, 4);
-        AddCards(cards, CardType.SeeTheFuture, 5);
-
-        // Карты котов (по 4 каждого вида)
-        AddCards(cards, CardType.RainbowCat, 4);
-        AddCards(cards, CardType.BeardCat, 4);
-        AddCards(cards, CardType.PotatoCat, 4);
-        AddCards(cards, CardType.WatermelonCat, 4);
-        AddCards(cards, CardType.TacoCat, 4);
-
-        // Проверяем общее количество карт
-        var totalCardsNeeded = (playerCount * 5) + explodingKittensInDeck;
-        if (cards.Count < totalCardsNeeded)
-        {
-            // Добавляем дополнительные карты котов, если нужно
-            int cardsToAdd = totalCardsNeeded - cards.Count;
-            for (int i = 0; i < cardsToAdd; i++)
+            var hand = new List<Card>();
+            for (int j = 0; j < 4; j++)
             {
-                cards.Add(Card.Create(CardType.RainbowCat));
+                if (deckWithoutExplosives.Count == 0) break;
+                hand.Add(deckWithoutExplosives[0]);
+                deckWithoutExplosives.RemoveAt(0);
             }
+            playerHands.Add(hand);
         }
 
-        return cards;
+        // ШАГ 3: Добавляем по 1 Обезвредить каждой руке
+        foreach (var hand in playerHands)
+        {
+            hand.Add(Card.Create(CardType.Defuse));
+        }
+
+        // ШАГ 4: Создаем финальную колоду из оставшихся карт + Взрывные Котята + оставшиеся Обезвредить
+        var finalDeck = new List<Card>(deckWithoutExplosives);
+
+        // Добавляем Взрывных Котят (игроки - 1)
+        AddCards(finalDeck, CardType.ExplodingKitten, playerCount - 1);
+
+        // Добавляем оставшиеся Обезвредить
+        int remainingDefuses;
+        if (playerCount == 2)
+        {
+            // Для 2 игроков: 2 дополнительные карты Обезвредить
+            remainingDefuses = 2;
+        }
+        else
+        {
+            // Для 3+ игроков: 6 - playerCount (у каждого уже по 1)
+            remainingDefuses = 6 - playerCount;
+            if (remainingDefuses < 0) remainingDefuses = 0;
+        }
+
+        AddCards(finalDeck, CardType.Defuse, remainingDefuses);
+
+        // Перемешиваем финальную колоду
+        Shuffle(finalDeck, random);
+
+        return (finalDeck, playerHands);
     }
 
     private static void AddCards(List<Card> cards, CardType type, int count)
@@ -63,6 +83,15 @@ public class DeckInitializer
         for (int i = 0; i < count; i++)
         {
             cards.Add(Card.Create(type));
+        }
+    }
+
+    private static void Shuffle(List<Card> cards, Random random)
+    {
+        for (int i = cards.Count - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (cards[i], cards[j]) = (cards[j], cards[i]);
         }
     }
 }

@@ -3,14 +3,14 @@ using Server.Game.Models;
 using Server.Infrastructure; // Добавлено
 using System.Net.Sockets;
 using System.Text;
+using static Server.Game.Models.GameSession;
 
 namespace Server.Networking.Commands.Handlers;
 
 [Command(Command.PlayCard)]
 public class PlayCardHandler : ICommandHandler
 {
-    public async Task Invoke(Socket sender, GameSessionManager sessionManager, // <-- Изменено
-        byte[]? payload = null, CancellationToken ct = default)
+    public async Task Invoke(Socket sender, GameSessionManager sessionManager, byte[]? payload = null, CancellationToken ct = default)
     {
         if (payload == null || payload.Length == 0)
         {
@@ -29,8 +29,8 @@ public class PlayCardHandler : ICommandHandler
         }
 
         // Получаем сессию напрямую из менеджера
-        var session = sessionManager.GetSession(gameId); // <-- Изменено
-        if (session == null) // <-- Изменено условие
+        var session = sessionManager.GetSession(gameId);
+        if (session == null)
         {
             await sender.SendError(CommandResponse.GameNotFound);
             return;
@@ -66,6 +66,9 @@ public class PlayCardHandler : ICommandHandler
                 PlayNopeHandler.StartNopeWindow(session);
             }
 
+            // Флаг для карт, которые завершают ход
+            bool shouldEndTurn = false;
+
             // Обработка карты
             switch (card.Type)
             {
@@ -75,10 +78,12 @@ public class PlayCardHandler : ICommandHandler
 
                 case CardType.Attack:
                     await HandleAttack(session, player, card, parts.Length > 3 ? parts[3] : null);
+                    shouldEndTurn = true; // Attack завершает ход
                     break;
 
                 case CardType.Skip:
                     await HandleSkip(session, player, card);
+                    shouldEndTurn = true; // Skip завершает ход
                     break;
 
                 case CardType.Favor:
@@ -87,7 +92,31 @@ public class PlayCardHandler : ICommandHandler
                         await sender.SendError(CommandResponse.InvalidAction);
                         return;
                     }
-                    await HandleFavor(session, player, card, Guid.Parse(parts[3]));
+
+                    // Попробуем распарсить как Guid
+                    if (Guid.TryParse(parts[3], out var favorTargetId))
+                    {
+                        await HandleFavor(session, player, card, favorTargetId);
+                    }
+                    else if (int.TryParse(parts[3], out var playerIndex))
+                    {
+                        // Используем индекс игрока
+                        var targetPlayer = session.Players
+                            .Where(p => p.IsAlive && p != player)
+                            .ElementAtOrDefault(playerIndex);
+
+                        if (targetPlayer == null)
+                        {
+                            await sender.SendError(CommandResponse.PlayerNotFound);
+                            return;
+                        }
+
+                        await HandleFavor(session, player, card, targetPlayer.Id);
+                    }
+                    else
+                    {
+                        await sender.SendError(CommandResponse.InvalidAction);
+                    }
                     break;
 
                 case CardType.Shuffle:
@@ -95,11 +124,11 @@ public class PlayCardHandler : ICommandHandler
                     break;
 
                 case CardType.SeeTheFuture:
-                    await HandleSeeTheFutureHandler(session, player, card); // Переименовали метод
+                    await HandleSeeTheFutureHandler(session, player, card);
                     break;
 
                 case CardType.Nope:
-                    await HandleNopeCard(session, player, card); // Переименовали метод
+                    await HandleNopeCard(session, player, card);
                     break;
 
                 default:
@@ -124,27 +153,26 @@ public class PlayCardHandler : ICommandHandler
             // Отправляем подтверждение
             await session.BroadcastMessage($"{player.Name} сыграл: {card.Name}");
 
-            // Если после этой карты можно играть еще - сообщаем игроку
-            if (session.TurnManager.CanPlayAnotherCard())
+            // Если карта завершает ход (Skip/Attack) - завершаем ход
+            if (shouldEndTurn)
             {
-                await player.Connection.SendMessage("Вы можете сыграть еще карту или взять карту из колоды (draw)");
-            }
-            else if (session.TurnManager.AttackPlayed)
-            {
-                // Если сыграли Attack - ход завершается без взятия карты
-                await player.Connection.SendMessage("Attack сыгран! Ход завершается без взятия карты.");
+                // Используем TurnManager для корректного завершения хода
+                await session.TurnManager.CompleteTurnAsync();
 
-                // Переходим к следующему игроку
-                session.NextPlayer();
-                if (session.State != GameState.GameOver)
+                if (session.State != GameState.GameOver && session.CurrentPlayer != null)
                 {
-                    await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer!.Name}");
-                    await session.CurrentPlayer!.Connection.SendMessage("Ваш ход!");
+                    await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer.Name}");
+                    await session.CurrentPlayer.Connection.SendMessage("Ваш ход!");
                 }
+            }
+            else if (session.TurnManager.CanPlayAnotherCard())
+            {
+                // Если можно играть еще карты - сообщаем игроку
+                await player.Connection.SendMessage("Вы можете сыграть еще карту или взять карту из колоды (draw)");
             }
             else if (!session.TurnManager.HasDrawnCard)
             {
-                // Если не сыграли Attack и не взяли карту - напоминаем взять карту
+                // Если не сыграли Skip/Attack и не взяли карту - напоминаем взять карту
                 await player.Connection.SendMessage("Вы должны взять карту из колоды! Команда: draw");
             }
 
@@ -183,10 +211,13 @@ public class PlayCardHandler : ICommandHandler
             await session.BroadcastMessage("⚡ Атака отменена картой НЕТ!");
             PlayNopeHandler.CleanupNopeWindow(session.Id);
             session.State = GameState.PlayerTurn;
+
+            // Атака отменена - игрок продолжает ход
+            await player.Connection.SendMessage("Атака отменена! Продолжайте ваш ход.");
             return;
         }
 
-        // Атака успешна - заканчиваем ход без взятия карты
+        // Атака успешна - заканчиваем ход БЕЗ взятия карты
         await session.BroadcastMessage($"⚔️ {player.Name} атаковал! Ход заканчивается.");
 
         // Применяем эффект атаки
@@ -225,19 +256,17 @@ public class PlayCardHandler : ICommandHandler
         attackTarget.ExtraTurns += 1;
         await session.BroadcastMessage($"{attackTarget.Name} ходит дважды из-за атаки!");
 
-        // Ход завершается, переходим к следующему игроку
-        session.NextPlayer();
+        // НЕ переходим к следующему игроку здесь!
+        // Это сделает TurnManager.CompleteTurnAsync() в основном методе
+        // session.NextPlayer(); // УБРАТЬ ЭТУ СТРОЧКУ
     }
 
     private async Task HandleSkip(GameSession session, Player player, Card card)
     {
         await session.BroadcastMessage($"{player.Name} пропускает ход.");
 
-        // Skip не заканчивает ход - игрок все равно должен взять карту
-        await player.Connection.SendMessage("⚠️ Вы пропустили ход, но все равно должны взять карту из колоды!");
-        await player.Connection.SendMessage("Используйте команду: draw");
-
-        // Ничего не делаем - игрок продолжает ход и должен взять карту
+        // Сообщаем игроку
+        await player.Connection.SendMessage("Вы пропустили ход. Ход завершается без взятия карты.");
     }
 
     private async Task HandleFavor(GameSession session, Player player, Card card, Guid targetId)
@@ -254,22 +283,76 @@ public class PlayCardHandler : ICommandHandler
             return;
         }
 
+        // Запоминаем информацию о pending действии
         session.State = GameState.ResolvingAction;
-        await target.Connection.SendMessage($"{player.Name} просит у вас карту в одолжение!");
-        await target.Connection.SendPlayerHand(target);
-        await target.Connection.SendMessage("Введите номер карты, которую хотите отдать:");
+        session.PendingFavor = new GameSession.PendingFavorAction
+        {
+            Requester = player,
+            Target = target,
+            Card = card,
+            Timestamp = DateTime.UtcNow
+        };
 
-        // В реальной реализации нужно дождаться ответа от target
-        // Для простоты берем случайную карту
+        Console.WriteLine($"DEBUG: Создан PendingFavor. Requester: {player.Name}, Target: {target.Name}");
+
+        // Отправляем целевому игроку запрос на выбор карты
+        await target.Connection.SendMessage($"══════════════════════════════════════════");
+        await target.Connection.SendMessage($"🎭 {player.Name} просит у вас карту в одолжение!");
+        await target.Connection.SendMessage($"══════════════════════════════════════════");
+
+        // Показываем руку
+        await target.Connection.SendPlayerHand(target);
+
+        // Отправляем инструкцию с ПРАВИЛЬНОЙ командой
+        await target.Connection.SendMessage($"💡 Используйте команду: favor {session.Id} {target.Id} [номер_карты]");
+        await target.Connection.SendMessage($"📝 Пример: favor {session.Id} {target.Id} 0");
+        await target.Connection.SendMessage($"⏰ У вас есть 30 секунд на выбор карты");
+        await target.Connection.SendMessage($"══════════════════════════════════════════");
+
+        // Ставим таймер на ответ
+        _ = Task.Delay(30000).ContinueWith(async _ =>
+        {
+            if (session.State == GameState.ResolvingAction &&
+                session.PendingFavor != null &&
+                session.PendingFavor.Target == target)
+            {
+                Console.WriteLine($"DEBUG: Таймаут Favor для {target.Name}");
+                // Таймаут - берем случайную карту
+                await HandleFavorTimeout(session, player, target);
+            }
+        });
+    }
+
+    private async Task HandleFavorTimeout(GameSession session, Player requester, Player target)
+    {
+        if (target.Hand.Count == 0)
+        {
+            await session.BroadcastMessage($"{target.Name} не имеет карт для одолжения.");
+            session.PendingFavor = null;
+            session.State = GameState.PlayerTurn;
+            return;
+        }
+
         var random = new Random();
         var stolenCardIndex = random.Next(target.Hand.Count);
         var stolenCard = target.Hand[stolenCardIndex];
+
+        // Убираем карту у целевого игрока
         target.Hand.RemoveAt(stolenCardIndex);
-        player.AddToHand(stolenCard);
 
-        await session.BroadcastMessage($"{player.Name} взял карту у {target.Name}");
+        // Добавляем карту запрашивающему игроку
+        requester.AddToHand(stolenCard);
 
+        await session.BroadcastMessage($"{requester.Name} взял случайную карту у {target.Name} (таймаут)!");
+
+        // Очищаем pending действие
+        session.PendingFavor = null;
         session.State = GameState.PlayerTurn;
+
+        // Обновляем руки обоих игроков
+        await target.Connection.SendPlayerHand(target);
+        await requester.Connection.SendPlayerHand(requester);
+        await session.BroadcastGameState();
     }
 
     private async Task HandleShuffle(GameSession session, Player player, Card card)

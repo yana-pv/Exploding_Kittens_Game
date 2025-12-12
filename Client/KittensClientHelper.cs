@@ -99,4 +99,19 @@ public class KittensClientHelper(Socket socket)
         var package = new KittensPackageBuilder(payload, Command.EndTurn);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
+
+    public Task SendChooseCard(Guid gameId, Guid playerId, int cardIndex)
+    {
+        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
+        var package = new KittensPackageBuilder(payload, Command.TargetPlayer); // Используем TargetPlayer
+        return socket.SendAsync(package.Build(), SocketFlags.None);
+    }
+
+    public Task SendFavorResponse(Guid gameId, Guid playerId, int cardIndex)
+    {
+        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
+        Console.WriteLine($"DEBUG Client: Отправляем FavorResponse: {gameId}:{playerId}:{cardIndex}");
+        var package = new KittensPackageBuilder(payload, Command.PlayFavor);
+        return socket.SendAsync(package.Build(), SocketFlags.None);
+    }
 }

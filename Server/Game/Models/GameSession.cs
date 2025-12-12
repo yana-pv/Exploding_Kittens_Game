@@ -39,6 +39,9 @@ public class GameSession
     [JsonIgnore]
     public int AlivePlayersCount => Players.Count(p => p.IsAlive);
 
+    [JsonIgnore]
+    public PendingFavorAction? PendingFavor { get; set; }
+
     // Действие, ожидающее карту "Нет"
     [JsonIgnore]
     public PendingAction? PendingNopeAction { get; set; }
@@ -95,21 +98,35 @@ public class GameSession
             throw new InvalidOperationException($"Необходимо {MinPlayers}-{MaxPlayers} игроков");
 
         GameDeck = new Deck();
-
-        var cards = DeckInitializer.CreateDeckForPlayers(Players.Count);
-        GameDeck.Initialize(cards);
-
         CardCounter = new CardCounter();
-        CardCounter.Initialize(cards);
 
+        // Используем новый метод для создания игры
+        var (finalDeck, playerHands) = DeckInitializer.CreateGameSetup(Players.Count);
+
+        // Раздаем карты игрокам
+        for (int i = 0; i < Players.Count; i++)
+        {
+            var player = Players[i];
+            var hand = playerHands[i];
+
+            foreach (var card in hand)
+            {
+                player.AddToHand(card);
+            }
+        }
+
+        // Инициализируем колоду
+        GameDeck.Initialize(finalDeck);
+        CardCounter.Initialize(finalDeck);
+
+        // Учитываем карты в руках игроков в счетчике
         foreach (var player in Players)
         {
-            for (int i = 0; i < 4; i++)
+            foreach (var card in player.Hand)
             {
-                player.AddToHand(GameDeck.Draw());
+                // Перемещаем карту из колоды в руку в счетчике
+                CardCounter.CardMoved(card.Type, CardLocation.Deck, CardLocation.Hand);
             }
-
-            player.AddToHand(Card.Create(CardType.Defuse));
         }
 
         CurrentPlayerIndex = new Random().Next(Players.Count);
@@ -126,20 +143,10 @@ public class GameSession
     {
         if (CurrentPlayer == null) return;
 
-        // Если ход еще не закончен и не форсированно, ждем
-        if (!force && !TurnManager.TurnEnded && !NeedsToDrawCard)
-            return;
-
-        // Завершаем текущий ход
-        if (!TurnManager.TurnEnded)
+        // Используем TurnManager для проверки завершения хода
+        if (!force && !TurnManager.TurnEnded)
         {
-            TurnManager.EndTurn();
-        }
-
-        // Если нужно взять карту, но игрок еще не взял
-        if (NeedsToDrawCard)
-        {
-            // Игрок должен взять карту перед сменой хода
+            // Ход еще не завершен
             return;
         }
 
@@ -161,15 +168,7 @@ public class GameSession
         TurnsPlayed++;
 
         // Сброс состояния хода для нового игрока
-        TurnManager = new TurnManager(this);
-        NeedsToDrawCard = false;
-
-        // Обработка дополнительных ходов
-        if (CurrentPlayer.ExtraTurns > 0)
-        {
-            CurrentPlayer.ExtraTurns--;
-            Log($"{CurrentPlayer.Name} имеет дополнительный ход");
-        }
+        // TurnManager сам сбросится в CompleteTurnAsync()
     }
 
     public void EliminatePlayer(Player player)
@@ -286,5 +285,14 @@ public class GameSession
         public required Card Card { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
         public object? ActionData { get; set; }
+    }
+
+    // ДОБАВЬТЕ ЭТОТ КЛАСС:
+    public class PendingFavorAction
+    {
+        public required Player Requester { get; set; }
+        public required Player Target { get; set; }
+        public required Card Card { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 }

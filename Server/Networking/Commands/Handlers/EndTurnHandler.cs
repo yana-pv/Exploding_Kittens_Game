@@ -51,29 +51,44 @@ public class EndTurnHandler : ICommandHandler
 
         try
         {
-            // Проверяем, взял ли игрок уже карту в этом ходу
-            if (!session.TurnManager.HasDrawnCard)
+            // Проверяем, должен ли игрок взять карту перед завершением хода
+            if (session.TurnManager.MustDrawCardBeforeEnd)
             {
-                // Игрок НЕ взял карту - он ДОЛЖЕН взять
                 await player.Connection.SendMessage("❌ Вы должны взять карту из колоды перед завершением хода!");
                 await player.Connection.SendMessage("Используйте команду: draw");
                 await sender.SendError(CommandResponse.InvalidAction);
                 return;
             }
 
-            // Игрок взял карту - можно завершать ход
-            session.TurnManager.EndTurn();
-
-            // Переходим к следующему игроку
-            session.NextPlayer();
-
-            if (session.State != GameState.GameOver)
+            // Если сыграли Skip или Attack - ход уже завершен в PlayCardHandler
+            if (session.TurnManager.SkipPlayed || session.TurnManager.AttackPlayed)
             {
-                await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer!.Name}");
-                await session.CurrentPlayer!.Connection.SendMessage("Ваш ход! Вы можете:");
-                await session.CurrentPlayer!.Connection.SendMessage("1. Сыграть карту (play [номер])");
-                await session.CurrentPlayer!.Connection.SendMessage("2. Взять карту из колоды (draw)");
-                await session.CurrentPlayer!.Connection.SendMessage("3. Завершить ход (end) - после взятия карты");
+                await player.Connection.SendMessage("Ход уже завершен картой Skip/Attack!");
+                return;
+            }
+
+            // Если уже взяли карту - завершаем ход
+            if (session.TurnManager.HasDrawnCard)
+            {
+                session.TurnManager.EndTurn();
+
+                // Автоматический переход к следующему игроку
+                await session.TurnManager.CompleteTurnAsync();
+
+                if (session.State != GameState.GameOver && session.CurrentPlayer != null)
+                {
+                    await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer.Name}");
+                    await session.CurrentPlayer.Connection.SendMessage("Ваш ход! Вы можете:");
+                    await session.CurrentPlayer.Connection.SendMessage("1. Сыграть карту (play [номер])");
+                    await session.CurrentPlayer.Connection.SendMessage("2. Взять карту из колоды (draw)");
+                }
+            }
+            else
+            {
+                // Если не взяли карту и не сыграли Skip/Attack - нельзя завершить
+                await player.Connection.SendMessage("❌ Нельзя завершить ход! Вы должны:");
+                await player.Connection.SendMessage("1. Взять карту (draw) ИЛИ");
+                await player.Connection.SendMessage("2. Сыграть карту Skip/Attack");
             }
 
             await session.BroadcastGameState();
