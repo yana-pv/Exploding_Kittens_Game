@@ -1,6 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization; // Добавлено
+using System.Text.Json.Serialization;
 using Server.Networking.Commands;
 
 namespace Client;
@@ -14,16 +14,23 @@ public class GameStateUpdateHandler : IClientCommandHandler
 
         try
         {
-            // --- Добавлено: Настройка опций десериализации ---
             var options = new JsonSerializerOptions();
-            options.Converters.Add(new JsonStringEnumConverter()); // <-- Конвертер enum-строка
-            // --- Конец изменений ---
+            options.Converters.Add(new JsonStringEnumConverter());
 
-            var state = JsonSerializer.Deserialize<GameStateInfo>(json, options); // <-- Передаём опции
+            var state = JsonSerializer.Deserialize<GameStateInfo>(json, options);
             if (state != null)
             {
+                // 1. Обновляем текущее состояние игры
                 client.CurrentGameState = state.State;
 
+                // 2. Обновляем список игроков (если сервер отправляет)
+                if (state.Players != null && state.Players.Count > 0)
+                {
+                    client.OtherPlayers.Clear();
+                    client.OtherPlayers.AddRange(state.Players);
+                }
+
+                // 3. Обрабатываем текущего игрока
                 if (!string.IsNullOrEmpty(state.CurrentPlayer))
                 {
                     var isMyTurn = state.CurrentPlayer == client.PlayerName;
@@ -35,16 +42,28 @@ public class GameStateUpdateHandler : IClientCommandHandler
                     }
                 }
 
-                if (state.Winner != null)
+                // 4. Обрабатываем победителя (если сервер отправляет)
+                if (!string.IsNullOrEmpty(state.Winner))
                 {
                     if (state.Winner == client.PlayerName)
                     {
                         client.AddToLog("🎉 ПОБЕДА! Вы выиграли игру!");
+                        client.SessionId = null; // Сбрасываем сессию при победе
                     }
                     else
                     {
                         client.AddToLog($"🏆 Победитель: {state.Winner}");
                     }
+                }
+
+                // 5. Выводим дополнительную информацию
+                client.AddToLog($"Игроков в игре: {state.AlivePlayers}");
+                client.AddToLog($"Карт в колоде: {state.CardsInDeck}");
+
+                // 6. Выводим информацию о ходе (если сервер отправляет)
+                if (state.TurnsPlayed > 0)
+                {
+                    client.AddToLog($"Ходов сыграно: {state.TurnsPlayed}");
                 }
             }
         }

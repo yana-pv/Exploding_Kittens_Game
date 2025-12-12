@@ -8,6 +8,9 @@ class Program
     {
         Console.Title = "Взрывные Котята - Клиент";
         Console.OutputEncoding = System.Text.Encoding.UTF8;
+        Console.InputEncoding = System.Text.Encoding.UTF8;
+
+        Console.ResetColor();
 
         Console.WriteLine("=== ВЗРЫВНЫЕ КОТЯТА ===");
         Console.WriteLine("Сетевой клиент для игры");

@@ -10,6 +10,9 @@ public class ClientGameStateDto
     public string? CurrentPlayerName { get; set; }
     public int AlivePlayers { get; set; }
     public int CardsInDeck { get; set; }
-    // Убираем TurnsPlayed, WinnerName, NeedsToDraw, GameLog, Players, CardCounter и т.д.
-    // Оставляем только самую необходимую информацию.
+
+    // ДОБАВЬТЕ ЭТИ СВОЙСТВА:
+    public int TurnsPlayed { get; set; }
+    public string? WinnerName { get; set; }
+    public List<PlayerInfoDto> Players { get; set; } = new();
 }

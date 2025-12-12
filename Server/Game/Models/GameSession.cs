@@ -46,6 +46,7 @@ public class GameSession
     [JsonIgnore]
     public PendingAction? PendingNopeAction { get; set; }
 
+
     public void InitializeTurnManager()
     {
         TurnManager = new TurnManager(this);
@@ -211,14 +212,25 @@ public class GameSession
 
     public string GetGameStateJson()
     {
-        var state = new ClientGameStateDto // <-- Используем DTO
+        var state = new ClientGameStateDto
         {
             SessionId = Id,
             State = State,
             CurrentPlayerName = CurrentPlayer?.Name,
             AlivePlayers = Players.Count(p => p.IsAlive),
-            CardsInDeck = GameDeck.CardsRemaining
-            // TurnsPlayed, WinnerName, NeedsToDraw и др. не включаем
+            CardsInDeck = GameDeck.CardsRemaining,
+            // Теперь эти свойства существуют:
+            TurnsPlayed = TurnsPlayed,
+            WinnerName = Winner?.Name,
+            Players = Players.Select(p => new PlayerInfoDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                CardCount = p.Hand.Count,
+                IsAlive = p.IsAlive,
+                TurnOrder = p.TurnOrder,
+                IsCurrentPlayer = CurrentPlayer?.Id == p.Id
+            }).ToList()
         };
 
         return JsonSerializer.Serialize(state);

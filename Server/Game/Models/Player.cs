@@ -23,12 +23,22 @@ public class Player
 
     public void AddToHand(Card card)
     {
+        Console.WriteLine($"DEBUG AddToHand: Добавляем карту {card.Name} игроку {Name}");
+        Console.WriteLine($"DEBUG: Карт в руке до: {Hand.Count}");
+
         Hand.Add(card);
+
+        // Сортируем по типу для порядка
         Hand.Sort((a, b) => a.Type.CompareTo(b.Type));
 
-        // Если есть CardCounter, обновляем его
-        // (Этот код будет работать, если CardCounter передается в Player)
-        // Или обновление делается в GameSession при раздаче
+        Console.WriteLine($"DEBUG: Карт в руке после: {Hand.Count}");
+
+        // Выведем все карты для отладки
+        Console.WriteLine($"DEBUG: Все карты в руке:");
+        for (int i = 0; i < Hand.Count; i++)
+        {
+            Console.WriteLine($"  {i}. {Hand[i].Name} (тип: {Hand[i].Type})");
+        }
     }
 
     public Card RemoveCard(CardType type)

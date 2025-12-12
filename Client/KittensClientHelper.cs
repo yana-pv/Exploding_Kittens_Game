@@ -54,12 +54,14 @@ public class KittensClientHelper(Socket socket)
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
-    public Task SendUseCombo(Guid gameId, Guid playerId, int comboType, List<int> cardIndices, string? targetPlayerId = null)
+    public Task SendUseCombo(Guid gameId, Guid playerId, int comboType, List<int> cardIndices, string? targetData = null)
     {
         var indicesStr = string.Join(",", cardIndices);
-        var payload = targetPlayerId != null
-            ? Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{comboType}:{indicesStr}:{targetPlayerId}")
+        var payload = targetData != null
+            ? Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{comboType}:{indicesStr}:{targetData}")
             : Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{comboType}:{indicesStr}");
+
+        Console.WriteLine($"DEBUG SendUseCombo: {gameId}:{playerId}:{comboType}:{indicesStr}:{targetData}");
 
         var package = new KittensPackageBuilder(payload, Command.UseCombo);
         return socket.SendAsync(package.Build(), SocketFlags.None);
@@ -112,6 +114,22 @@ public class KittensClientHelper(Socket socket)
         var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
         Console.WriteLine($"DEBUG Client: Отправляем FavorResponse: {gameId}:{playerId}:{cardIndex}");
         var package = new KittensPackageBuilder(payload, Command.PlayFavor);
+        return socket.SendAsync(package.Build(), SocketFlags.None);
+    }
+
+    public Task SendStealCard(Guid gameId, Guid playerId, int cardIndex)
+    {
+        // Отправляем только ID игры, ID игрока и номер карты
+        // Сервер сам найдет цель из PendingStealAction
+        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
+        var package = new KittensPackageBuilder(payload, Command.StealCard);
+        return socket.SendAsync(package.Build(), SocketFlags.None);
+    }
+
+    public Task SendTakeFromDiscard(Guid gameId, Guid playerId, int cardIndex)
+    {
+        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
+        var package = new KittensPackageBuilder(payload, Command.TakeFromDiscard);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 }

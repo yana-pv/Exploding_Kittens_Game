@@ -13,10 +13,12 @@ public enum Command : byte
     PlayCard = 0x20,
     DrawCard = 0x21,
     UseCombo = 0x22,
-    TargetPlayer = 0x23,
+    TargetPlayer = 0x23,     // Для выбора карты в комбо 3/5
     PlayNope = 0x24,
     PlayDefuse = 0x25,
-    PlayFavor = 0x26, // Новая команда для ответа на Favor
+    PlayFavor = 0x26,
+    StealCard = 0x27,        // НОВАЯ: Для кражи в комбо 2
+    TakeFromDiscard = 0x28,  // ← НОВАЯ КОМАНДА ДЛЯ КОМБО 5
 
 
     // Информационные

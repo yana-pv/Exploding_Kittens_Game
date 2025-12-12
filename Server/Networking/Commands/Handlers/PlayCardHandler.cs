@@ -271,17 +271,24 @@ public class PlayCardHandler : ICommandHandler
 
     private async Task HandleFavor(GameSession session, Player player, Card card, Guid targetId)
     {
+        Console.WriteLine($"DEBUG HandleFavor: Начинаем обработку для игрока {player.Name}");
+        Console.WriteLine($"DEBUG: Цель ID: {targetId}");
+
         var target = session.GetPlayerById(targetId);
         if (target == null || target == player || !target.IsAlive)
         {
+            Console.WriteLine($"DEBUG: Некорректный целевой игрок");
             throw new ArgumentException("Некорректный целевой игрок");
         }
 
         if (target.Hand.Count == 0)
         {
             await session.BroadcastMessage($"{target.Name} не имеет карт для одолжения.");
+            Console.WriteLine($"DEBUG: У цели нет карт");
             return;
         }
+
+        Console.WriteLine($"DEBUG: У цели {target.Name} есть {target.Hand.Count} карт");
 
         // Запоминаем информацию о pending действии
         session.State = GameState.ResolvingAction;
@@ -295,39 +302,65 @@ public class PlayCardHandler : ICommandHandler
 
         Console.WriteLine($"DEBUG: Создан PendingFavor. Requester: {player.Name}, Target: {target.Name}");
 
-        // Отправляем целевому игроку запрос на выбор карты
-        await target.Connection.SendMessage($"══════════════════════════════════════════");
-        await target.Connection.SendMessage($"🎭 {player.Name} просит у вас карту в одолжение!");
-        await target.Connection.SendMessage($"══════════════════════════════════════════");
-
-        // Показываем руку
-        await target.Connection.SendPlayerHand(target);
-
-        // Отправляем инструкцию с ПРАВИЛЬНОЙ командой
-        await target.Connection.SendMessage($"💡 Используйте команду: favor {session.Id} {target.Id} [номер_карты]");
-        await target.Connection.SendMessage($"📝 Пример: favor {session.Id} {target.Id} 0");
-        await target.Connection.SendMessage($"⏰ У вас есть 30 секунд на выбор карты");
-        await target.Connection.SendMessage($"══════════════════════════════════════════");
-
-        // Ставим таймер на ответ
-        _ = Task.Delay(30000).ContinueWith(async _ =>
+        try
         {
-            if (session.State == GameState.ResolvingAction &&
-                session.PendingFavor != null &&
-                session.PendingFavor.Target == target)
+            // Отправляем целевому игроку запрос на выбор карты
+            await target.Connection.SendMessage($"══════════════════════════════════════════");
+            await target.Connection.SendMessage($"🎭 {player.Name} просит у вас карту в одолжение!");
+            await target.Connection.SendMessage($"══════════════════════════════════════════");
+
+            // Показываем руку
+            await target.Connection.SendPlayerHand(target);
+
+            // Отправляем инструкцию с ПРАВИЛЬНОЙ командой
+            await target.Connection.SendMessage($"💡 Используйте команду: favor {session.Id} {target.Id} [номер_карты]");
+            await target.Connection.SendMessage($"📝 Пример: favor {session.Id} {target.Id} 0");
+            await target.Connection.SendMessage($"⏰ У вас есть 30 секунд на выбор карты");
+            await target.Connection.SendMessage($"══════════════════════════════════════════");
+
+            Console.WriteLine($"DEBUG: Сообщение отправлено цели {target.Name}");
+
+            // Ставим таймер на ответ
+            _ = Task.Delay(30000).ContinueWith(async _ =>
             {
-                Console.WriteLine($"DEBUG: Таймаут Favor для {target.Name}");
-                // Таймаут - берем случайную карту
-                await HandleFavorTimeout(session, player, target);
-            }
-        });
+                Console.WriteLine($"DEBUG: Проверяем таймаут Favor для {target.Name}");
+
+                if (session.State == GameState.ResolvingAction &&
+                    session.PendingFavor != null &&
+                    session.PendingFavor.Target == target &&
+                    session.PendingFavor.Timestamp == session.PendingFavor.Timestamp) // проверяем тот же самый запрос
+                {
+                    Console.WriteLine($"DEBUG: Таймаут Favor для {target.Name}");
+                    // Таймаут - берем случайную карту
+                    await HandleFavorTimeout(session, player, target);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"DEBUG: Ошибка отправки сообщения цели: {ex.Message}");
+            // Если не удалось отправить сообщение, сбрасываем pending действие
+            session.PendingFavor = null;
+            session.State = GameState.PlayerTurn;
+        }
     }
 
     private async Task HandleFavorTimeout(GameSession session, Player requester, Player target)
     {
+        Console.WriteLine($"DEBUG HandleFavorTimeout: Начинаем таймаут");
+
+        if (session.State != GameState.ResolvingAction ||
+            session.PendingFavor == null ||
+            session.PendingFavor.Target != target)
+        {
+            Console.WriteLine($"DEBUG: Нет активного запроса или запрос уже обработан");
+            return;
+        }
+
         if (target.Hand.Count == 0)
         {
             await session.BroadcastMessage($"{target.Name} не имеет карт для одолжения.");
+            Console.WriteLine($"DEBUG: У цели нет карт");
             session.PendingFavor = null;
             session.State = GameState.PlayerTurn;
             return;
@@ -336,6 +369,8 @@ public class PlayCardHandler : ICommandHandler
         var random = new Random();
         var stolenCardIndex = random.Next(target.Hand.Count);
         var stolenCard = target.Hand[stolenCardIndex];
+
+        Console.WriteLine($"DEBUG: Таймаут - берем случайную карту #{stolenCardIndex}: {stolenCard.Name}");
 
         // Убираем карту у целевого игрока
         target.Hand.RemoveAt(stolenCardIndex);
@@ -353,6 +388,8 @@ public class PlayCardHandler : ICommandHandler
         await target.Connection.SendPlayerHand(target);
         await requester.Connection.SendPlayerHand(requester);
         await session.BroadcastGameState();
+
+        Console.WriteLine($"DEBUG HandleFavorTimeout: Завершено");
     }
 
     private async Task HandleShuffle(GameSession session, Player player, Card card)
@@ -456,61 +493,133 @@ public class PlayCardHandler : ICommandHandler
 
         switch (comboType)
         {
-            case 2: // Две одинаковые - слепой карманник
-                if (!string.IsNullOrEmpty(targetPlayerId) && Guid.TryParse(targetPlayerId, out var targetId1))
-                {
-                    var target1 = session.GetPlayerById(targetId1);
-                    if (target1 != null && target1 != player && target1.IsAlive && target1.Hand.Count > 0)
-                    {
-                        var random = new Random();
-                        var stolenIndex = random.Next(target1.Hand.Count);
-                        var stolenCard = target1.Hand[stolenIndex];
-                        target1.Hand.RemoveAt(stolenIndex);
-                        player.AddToHand(stolenCard);
-
-                        await session.BroadcastMessage($"{player.Name} украл карту у {target1.Name}!");
-                    }
-                }
+            case 2: // Две одинаковые - слепой карманник (случайная карта)
+                await HandleTwoOfAKindCombo(session, player, targetPlayerId);
                 break;
 
-            case 3: // Три одинаковые - время рыбачить
-                if (!string.IsNullOrEmpty(targetPlayerId))
-                {
-                    var targetParts = targetPlayerId.Split('|');
-                    if (targetParts.Length == 2 && Guid.TryParse(targetParts[0], out var targetId2))
-                    {
-                        var target2 = session.GetPlayerById(targetId2);
-                        if (target2 != null && target2 != player && target2.IsAlive)
-                        {
-                            var requestedCardName = targetParts[1];
-                            var requestedCard = target2.Hand.FirstOrDefault(c =>
-                                c.Name.Equals(requestedCardName, StringComparison.OrdinalIgnoreCase));
-
-                            if (requestedCard != null)
-                            {
-                                target2.Hand.Remove(requestedCard);
-                                player.AddToHand(requestedCard);
-                                await session.BroadcastMessage($"{player.Name} взял карту '{requestedCard.Name}' у {target2.Name}!");
-                            }
-                            else
-                            {
-                                await session.BroadcastMessage($"{player.Name} пытался взять карту '{requestedCardName}' у {target2.Name}, но такой карты нет!");
-                            }
-                        }
-                    }
-                }
+            case 3: // Три одинаковые - время рыбачить (конкретная карта)
+                await HandleThreeOfAKindCombo(session, player, targetPlayerId);
                 break;
 
             case 5: // Пять разных - воруй из колоды сброса
-                if (session.GameDeck.DiscardPile.Count > 0)
-                {
-                    var takenCard = session.GameDeck.TakeFromDiscard(0);
-                    player.AddToHand(takenCard);
-                    await session.BroadcastMessage($"{player.Name} взял карту из колоды сброса!");
-                }
+                await HandleFiveDifferentCombo(session, player);
                 break;
         }
 
         PlayNopeHandler.CleanupNopeWindow(session.Id);
+    }
+
+    private async Task HandleTwoOfAKindCombo(GameSession session, Player player, string? targetPlayerId)
+    {
+        if (string.IsNullOrEmpty(targetPlayerId) || !Guid.TryParse(targetPlayerId, out var targetId))
+        {
+            await player.Connection.SendMessage("❌ Укажите ID игрока для кражи карты!");
+            throw new ArgumentException("Не указан целевой игрок");
+        }
+
+        var target = session.GetPlayerById(targetId);
+        if (target == null || target == player || !target.IsAlive)
+        {
+            await player.Connection.SendMessage("❌ Некорректный целевой игрок!");
+            throw new ArgumentException("Некорректный целевой игрок");
+        }
+
+        if (target.Hand.Count == 0)
+        {
+            await session.BroadcastMessage($"🎭 {target.Name} не имеет карт для кражи!");
+            return;
+        }
+
+        // Берем СЛУЧАЙНУЮ карту у целевого игрока
+        var random = new Random();
+        var stolenCardIndex = random.Next(target.Hand.Count);
+        var stolenCard = target.Hand[stolenCardIndex];
+
+        // Убираем карту у целевого игрока
+        target.Hand.RemoveAt(stolenCardIndex);
+
+        // Добавляем карту игроку
+        player.AddToHand(stolenCard);
+
+        await session.BroadcastMessage($"🎭 {player.Name} украл СЛУЧАЙНУЮ карту у {target.Name}!");
+        await session.BroadcastMessage($"📤 У {target.Name} взята карта: {stolenCard.Name}");
+
+        // Обновляем руки обоих игроков
+        await target.Connection.SendPlayerHand(target);
+        await player.Connection.SendPlayerHand(player);
+    }
+
+    private async Task HandleThreeOfAKindCombo(GameSession session, Player player, string? targetPlayerId)
+    {
+        if (string.IsNullOrEmpty(targetPlayerId))
+        {
+            await player.Connection.SendMessage("❌ Укажите игрока и название карты в формате: playerId|cardName!");
+            throw new ArgumentException("Не указаны данные для целевой карты");
+        }
+
+        var parts = targetPlayerId.Split('|');
+        if (parts.Length != 2 || !Guid.TryParse(parts[0], out var targetId))
+        {
+            await player.Connection.SendMessage("❌ Некорректный формат данных! Используйте: playerId|cardName");
+            throw new ArgumentException("Некорректный формат данных");
+        }
+
+        var target = session.GetPlayerById(targetId);
+        if (target == null || target == player || !target.IsAlive)
+        {
+            await player.Connection.SendMessage("❌ Некорректный целевой игрок!");
+            throw new ArgumentException("Некорректный целевой игрок");
+        }
+
+        var requestedCardName = parts[1];
+
+        // Ищем карту по имени у целевого игрока
+        var requestedCard = target.Hand.FirstOrDefault(c =>
+            c.Name.Equals(requestedCardName, StringComparison.OrdinalIgnoreCase));
+
+        if (requestedCard == null)
+        {
+            await session.BroadcastMessage($"🎣 {player.Name} пытался взять карту '{requestedCardName}' у {target.Name}, но такой карты нет!");
+            return;
+        }
+
+        // Забираем КОНКРЕТНУЮ карту
+        target.Hand.Remove(requestedCard);
+        player.AddToHand(requestedCard);
+
+        await session.BroadcastMessage($"🎣 {player.Name} взял карту '{requestedCard.Name}' у {target.Name}!");
+
+        // Обновляем руки обоих игроков
+        await target.Connection.SendPlayerHand(target);
+        await player.Connection.SendPlayerHand(player);
+    }
+
+    private async Task HandleFiveDifferentCombo(GameSession session, Player player)
+    {
+        if (session.GameDeck.DiscardPile.Count == 0)
+        {
+            await session.BroadcastMessage("🗑️ Колода сброса пуста!");
+            return;
+        }
+
+        // Показываем карты в сбросе игроку
+        var discardCards = session.GameDeck.DiscardPile
+            .Select((card, index) => $"{index}. {card.Name}")
+            .ToList();
+
+        var discardInfo = string.Join("\n", discardCards);
+        await player.Connection.SendMessage($"🗑️ Карты в сбросе:\n{discardInfo}");
+
+        // Для простоты берем самую верхнюю карту из сброса
+        // В полной реализации нужно дать игроку выбрать
+        if (session.GameDeck.DiscardPile.Count > 0)
+        {
+            var takenCard = session.GameDeck.TakeFromDiscard(0); // Берем верхнюю карту
+            player.AddToHand(takenCard);
+
+            await session.BroadcastMessage($"🎨 {player.Name} взял карту '{takenCard.Name}' из колоды сброса!");
+
+            await player.Connection.SendPlayerHand(player);
+        }
     }
 }
