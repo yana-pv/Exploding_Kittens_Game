@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Server.Networking.Commands.Handlers;
 
-[Command(Command.TargetPlayer)] // Используем существующую команду или создаем новую
+[Command(Command.TargetPlayer)] 
 public class ChooseCardHandler : ICommandHandler
 {
     public async Task Invoke(Socket sender, GameSessionManager sessionManager,
@@ -42,7 +42,6 @@ public class ChooseCardHandler : ICommandHandler
             return;
         }
 
-        // Проверяем, есть ли pending favor
         if (session.PendingFavor == null || session.PendingFavor.Target != player)
         {
             await sender.SendError(CommandResponse.InvalidAction);
@@ -59,19 +58,15 @@ public class ChooseCardHandler : ICommandHandler
         var favor = session.PendingFavor;
         var stolenCard = player.Hand[cardIndex];
 
-        // Убираем карту у целевого игрока
         player.Hand.RemoveAt(cardIndex);
 
-        // Добавляем карту запрашивающему игроку
         favor.Requester.AddToHand(stolenCard);
 
         await session.BroadcastMessage($"{favor.Requester.Name} взял карту '{stolenCard.Name}' у {player.Name}!");
 
-        // Очищаем pending действие
         session.PendingFavor = null;
         session.State = GameState.PlayerTurn;
 
-        // Обновляем руки обоих игроков
         await player.Connection.SendPlayerHand(player);
         await favor.Requester.Connection.SendPlayerHand(favor.Requester);
         await session.BroadcastGameState();

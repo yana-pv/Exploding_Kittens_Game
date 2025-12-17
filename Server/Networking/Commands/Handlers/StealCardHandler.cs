@@ -1,8 +1,5 @@
 ﻿using Server.Game.Enums;
 using Server.Infrastructure;
-using Server.Networking;
-using Server.Networking.Commands;
-using Server.Networking.Commands.Handlers;
 using System.Net.Sockets;
 using System.Text;
 
@@ -24,7 +21,6 @@ public class StealCardHandler : ICommandHandler
         var data = Encoding.UTF8.GetString(payload);
         var parts = data.Split(':');
 
-        // ТЕПЕРЬ ОЖИДАЕМ: gameId:playerId:cardIndex
         if (parts.Length < 3 || !Guid.TryParse(parts[0], out var gameId) ||
             !Guid.TryParse(parts[1], out var playerId))
         {
@@ -52,7 +48,6 @@ public class StealCardHandler : ICommandHandler
             return;
         }
 
-        // Пытаемся завершить кражу (цель берется из PendingStealAction)
         var success = await UseComboHandler.TryCompleteSteal(session, player, cardIndex);
 
         if (!success)

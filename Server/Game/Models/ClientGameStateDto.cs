@@ -1,5 +1,4 @@
-﻿// File: Server/Game/Models/ClientGameStateDto.cs
-using Server.Game.Enums;
+﻿using Server.Game.Enums;
 
 namespace Server.Game.Models;
 
@@ -10,8 +9,6 @@ public class ClientGameStateDto
     public string? CurrentPlayerName { get; set; }
     public int AlivePlayers { get; set; }
     public int CardsInDeck { get; set; }
-
-    // ДОБАВЬТЕ ЭТИ СВОЙСТВА:
     public int TurnsPlayed { get; set; }
     public string? WinnerName { get; set; }
     public List<PlayerInfoDto> Players { get; set; } = new();

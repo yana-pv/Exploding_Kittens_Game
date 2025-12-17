@@ -1,6 +1,6 @@
 ﻿using Server.Game.Enums;
 using Server.Game.Models;
-using Server.Infrastructure; // Добавлено
+using Server.Infrastructure; 
 using System.Net.Sockets;
 using System.Text;
 
@@ -9,7 +9,7 @@ namespace Server.Networking.Commands.Handlers;
 [Command(Command.EndTurn)]
 public class EndTurnHandler : ICommandHandler
 {
-    public async Task Invoke(Socket sender, GameSessionManager sessionManager, // <-- Изменено
+    public async Task Invoke(Socket sender, GameSessionManager sessionManager, 
         byte[]? payload = null, CancellationToken ct = default)
     {
         if (payload == null || payload.Length == 0)
@@ -28,9 +28,8 @@ public class EndTurnHandler : ICommandHandler
             return;
         }
 
-        // Получаем сессию напрямую из менеджера
-        var session = sessionManager.GetSession(gameId); // <-- Изменено
-        if (session == null) // <-- Изменено условие
+        var session = sessionManager.GetSession(gameId); 
+        if (session == null) 
         {
             await sender.SendError(CommandResponse.GameNotFound);
             return;
@@ -51,7 +50,6 @@ public class EndTurnHandler : ICommandHandler
 
         try
         {
-            // Проверяем, должен ли игрок взять карту перед завершением хода
             if (session.TurnManager.MustDrawCardBeforeEnd)
             {
                 await player.Connection.SendMessage("❌ Вы должны взять карту из колоды перед завершением хода!");
@@ -60,19 +58,16 @@ public class EndTurnHandler : ICommandHandler
                 return;
             }
 
-            // Если сыграли Skip или Attack - ход уже завершен в PlayCardHandler
             if (session.TurnManager.SkipPlayed || session.TurnManager.AttackPlayed)
             {
                 await player.Connection.SendMessage("Ход уже завершен картой Skip/Attack!");
                 return;
             }
 
-            // Если уже взяли карту - завершаем ход
             if (session.TurnManager.HasDrawnCard)
             {
                 session.TurnManager.EndTurn();
 
-                // Автоматический переход к следующему игроку
                 await session.TurnManager.CompleteTurnAsync();
 
                 if (session.State != GameState.GameOver && session.CurrentPlayer != null)
@@ -85,7 +80,6 @@ public class EndTurnHandler : ICommandHandler
             }
             else
             {
-                // Если не взяли карту и не сыграли Skip/Attack - нельзя завершить
                 await player.Connection.SendMessage("❌ Нельзя завершить ход! Вы должны:");
                 await player.Connection.SendMessage("1. Взять карту (draw) ИЛИ");
                 await player.Connection.SendMessage("2. Сыграть карту Skip/Attack");

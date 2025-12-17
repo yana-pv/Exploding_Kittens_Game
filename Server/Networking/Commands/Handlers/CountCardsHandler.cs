@@ -1,15 +1,15 @@
 ﻿using Server.Game.Enums;
 using Server.Game.Models;
-using Server.Infrastructure; // Добавлено
+using Server.Infrastructure; 
 using System.Net.Sockets;
 using System.Text;
 
 namespace Server.Networking.Commands.Handlers;
 
-[Command(Command.GetGameState)] // Используем существующую команду
+[Command(Command.GetGameState)] 
 public class CountCardsHandler : ICommandHandler
 {
-    public async Task Invoke(Socket sender, GameSessionManager sessionManager, // <-- Изменено
+    public async Task Invoke(Socket sender, GameSessionManager sessionManager, 
         byte[]? payload = null, CancellationToken ct = default)
     {
         if (payload == null || payload.Length == 0)
@@ -24,9 +24,8 @@ public class CountCardsHandler : ICommandHandler
             return;
         }
 
-        // Получаем сессию напрямую из менеджера
-        var session = sessionManager.GetSession(gameId); // <-- Изменено
-        if (session == null) // <-- Изменено условие
+        var session = sessionManager.GetSession(gameId); 
+        if (session == null) 
         {
             await sender.SendError(CommandResponse.GameNotFound);
             return;
@@ -36,7 +35,6 @@ public class CountCardsHandler : ICommandHandler
         {
             var counts = new Dictionary<string, int>();
 
-            // Подсчитываем карты по типам
             foreach (CardType type in Enum.GetValues(typeof(CardType)))
             {
                 var total = session.CardCounter.GetTotalRemaining(type);

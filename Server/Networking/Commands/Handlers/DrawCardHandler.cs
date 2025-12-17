@@ -53,12 +53,7 @@ public class DrawCardHandler : ICommandHandler
             var drawnCard = session.GameDeck.Draw();
             await session.BroadcastMessage($"{player.Name} берет карту из колоды.");
 
-            Console.WriteLine($"DEBUG DrawCard: игрок {player.Name} взял карту, ExtraTurns до={player.ExtraTurns}");
-
-            // Регистрируем взятие карты
             session.TurnManager.CardDrawn();
-
-            Console.WriteLine($"DEBUG DrawCard: после CardDrawn(), ExtraTurns после={player.ExtraTurns}");
 
             if (drawnCard.Type == CardType.ExplodingKitten)
             {
@@ -70,8 +65,6 @@ public class DrawCardHandler : ICommandHandler
                 await player.Connection.SendMessage($"Вы взяли: {drawnCard.Name}");
                 await player.Connection.SendPlayerHand(player);
 
-                // Автоматически завершаем ход после взятия карты
-                Console.WriteLine($"DEBUG DrawCard: вызываем CompleteTurnAsync()");
                 await session.TurnManager.CompleteTurnAsync();
 
                 if (session.State != GameState.GameOver && session.CurrentPlayer != null)
@@ -93,14 +86,12 @@ public class DrawCardHandler : ICommandHandler
     {
         await session.BroadcastMessage($"💥 {player.Name} вытащил Взрывного Котенка!");
 
-        // Отправляем срочное сообщение игроку
         await SendUrgentExplosionMessage(player, session);
 
         if (player.HasDefuseCard)
         {
             PlayDefuseHandler.RegisterExplosion(session, player);
 
-            // Отправляем подробные инструкции
             await SendDefuseInstructions(player, session);
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -116,22 +107,17 @@ public class DrawCardHandler : ICommandHandler
             }
             catch (TaskCanceledException)
             {
-                // Игрок успел использовать Defuse - сообщение будет отправлено из PlayDefuseHandler
-                Console.WriteLine($"Игрок {player.Name} обезвредил котенка вовремя");
             }
         }
         else
         {
-            // Отправляем сообщение об отсутствии дефуза
             await SendNoDefuseMessage(player);
             await HandlePlayerElimination(session, player, kittenCard);
         }
     }
 
-    // Метод: Инструкции по обезвреживанию
     private async Task SendDefuseInstructions(Player player, GameSession session)
     {
-        // Делаем сообщение КОРОЧЕ, чтобы не обрезалось
         var shortInstructions = new[]
         {
         $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас 30 сек!",
@@ -141,7 +127,6 @@ public class DrawCardHandler : ICommandHandler
         $"Коротко: defuse [позиция] (клиент добавит ID)"
     };
 
-        // Отправляем несколько коротких сообщений
         foreach (var message in shortInstructions)
         {
             var data = KittensPackageBuilder.MessageResponse(message);
@@ -150,10 +135,8 @@ public class DrawCardHandler : ICommandHandler
         }
     }
 
-    // Метод: Срочное сообщение о взрывном котенке
     private async Task SendUrgentExplosionMessage(Player player, GameSession session)
     {
-        // СДЕЛАТЬ СООБЩЕНИЕ КОРОЧЕ
         var urgentMessage = player.HasDefuseCard
             ? $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас есть Обезвредить!\nУ вас 30 секунд!"
             : $"💣 ВЗРЫВНОЙ КОТЕНОК! Нет Обезвредить!\n💥 Вы выбываете!";
@@ -162,7 +145,6 @@ public class DrawCardHandler : ICommandHandler
         await player.Connection.SendAsync(data, SocketFlags.None);
     }
 
-    // Метод: Сообщение об отсутствии дефуза
     private async Task SendNoDefuseMessage(Player player)
     {
         var message = "❌ У вас нет карты Обезвредить!\n" +
@@ -174,10 +156,8 @@ public class DrawCardHandler : ICommandHandler
 
     private async Task HandlePlayerElimination(GameSession session, Player player, Card kittenCard)
     {
-        // Игрок выбывает через метод сессии, который теперь отправляет сообщения
         session.EliminatePlayer(player);
 
-        // Переход к следующему игроку через TurnManager
         await session.TurnManager.CompleteTurnAsync();
 
         if (session.State != GameState.GameOver && session.CurrentPlayer != null)

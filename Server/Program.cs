@@ -8,8 +8,6 @@ class Program
     static async Task Main(string[] args)
     {
         Console.WriteLine("=== Сервер Взрывные Котята ===");
-        Console.WriteLine("Автор: Система на основе WordGuesser");
-        Console.WriteLine();
 
         var ipAddress = IPAddress.Parse("127.0.0.1");
         var port = 5001;
@@ -35,18 +33,11 @@ class Program
         var endPoint = new IPEndPoint(ipAddress, port);
         var server = new EKServer(endPoint);
 
-        // Обработка Ctrl+C
-        Console.CancelKeyPress += (sender, e) =>
-        {
-            e.Cancel = true;
-            Console.WriteLine("\nОстановка сервера...");
-            server.StopAsync().Wait();
-        };
-
         try
         {
             await server.StartAsync();
         }
+
         catch (Exception ex)
         {
             Console.WriteLine($"Фатальная ошибка: {ex.Message}");

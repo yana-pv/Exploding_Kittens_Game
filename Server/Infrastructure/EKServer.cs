@@ -37,13 +37,11 @@ public class EKServer
                 var clientSocket = await _serverSocket.AcceptAsync(_cancellationTokenSource.Token);
                 Console.WriteLine($"Новое подключение: {clientSocket.RemoteEndPoint}");
 
-                // Запускаем обработку клиента в отдельной задаче
                 var clientTask = Task.Run(() => HandleClientAsync(clientSocket),
                     _cancellationTokenSource.Token);
 
                 _clientTasks[clientSocket] = clientTask;
 
-                // Удаляем завершенные задачи
                 CleanupCompletedTasks();
             }
         }
@@ -61,7 +59,6 @@ public class EKServer
     {
         _cancellationTokenSource.Cancel();
 
-        // Ждем завершения всех клиентских задач
         await Task.WhenAll(_clientTasks.Values);
 
         _serverSocket.Close();
@@ -72,7 +69,6 @@ public class EKServer
     {
         try
         {
-            // Приветственное сообщение
             await SendWelcomeMessage(clientSocket);
 
             byte[] buffer = new byte[1024];
@@ -89,7 +85,6 @@ public class EKServer
                     break;
                 }
 
-                // Копируем данные в новый массив нужного размера
                 var data = new byte[bytesReceived];
                 Array.Copy(buffer, 0, data, 0, bytesReceived);
 
@@ -128,36 +123,28 @@ public class EKServer
                             "- play [ID_игры] [номер_карты] - сыграть карту\n" +
                             "- draw [ID_игры] - взять карту из колоды\n";
 
-        Console.WriteLine($"Отправляем сообщение длиной {Encoding.UTF8.GetByteCount(welcomeMessage)} байт");
-
         await clientSocket.SendAsync(KittensPackageBuilder.MessageResponse(welcomeMessage),
             SocketFlags.None);
     }
 
     private async Task ProcessClientData(Socket clientSocket, byte[] data)
     {
-        Console.WriteLine($"Получено данных: {data.Length} байт");
-        Console.WriteLine($"Hex: {BitConverter.ToString(data)}");
-
         var memory = new Memory<byte>(data);
         var parsed = KittensPackageParser.TryParse(memory.Span, out var error);
 
         if (parsed == null)
         {
-            Console.WriteLine($"Ошибка парсинга: {error}");
             await SendErrorResponse(clientSocket, (CommandResponse)error!);
             return;
         }
 
         try
         {
-            // Передаём _sessionManager вместо копии словаря
             var handler = CommandHandlerFactory.GetHandler(parsed.Value.Command);
-            await handler.Invoke(clientSocket, _sessionManager, parsed.Value.Payload); // <-- Изменено
+            await handler.Invoke(clientSocket, _sessionManager, parsed.Value.Payload); 
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка обработки команды: {ex.Message}");
             await SendMessageResponse(clientSocket, $"Ошибка: {ex.Message}");
         }
     }
@@ -174,7 +161,7 @@ public class EKServer
 
     private async Task RemovePlayerFromAllSessions(Socket clientSocket)
     {
-        foreach (var session in _sessionManager.GetActiveSessions()) // Это возвращает сессии НЕ в GameOver и с игроками
+        foreach (var session in _sessionManager.GetActiveSessions()) 
         {
             var player = session.GetPlayerBySocket(clientSocket);
             if (player != null)
@@ -183,26 +170,22 @@ public class EKServer
                 await BroadcastSessionMessage(session, $"{player.Name} отключился от игры.");
 
                 // Проверяем, нужно ли завершить игру ИЛИ удалить сессию
-                if (session.State != GameState.WaitingForPlayers) // Если игра уже началась
+                if (session.State != GameState.WaitingForPlayers) 
                 {
                     if (session.AlivePlayersCount < session.MinPlayers && session.State != GameState.GameOver)
                     {
                         await BroadcastSessionMessage(session, "Игра прервана из-за недостатка игроков.");
-                        session.State = GameState.GameOver; // Завершаем игру, она не будет возвращена через GetActiveSessions
+                        session.State = GameState.GameOver; 
                     }
                 }
-                else // Если игра ЕЩЁ не началась (WaitingForPlayers)
+
+                else 
                 {
-                    // Если после удаления игрока в сессии никого не осталось
                     if (session.Players.Count == 0)
                     {
-                        // Удаляем сессию из менеджера, чтобы она не мешалась и не накапливалась
                         _sessionManager.RemoveSession(session.Id);
                         Console.WriteLine($"Игра {session.Id} удалена, так как создатель отключился и игроков больше нет.");
-                        // Больше ничего делать не нужно, сессия исчезнет из _sessionManager
-                        // и не будет возвращена GetActiveSessions в следующий раз.
                     }
-                    // Если в сессии остались другие игроки, она просто остаётся в ожидании.
                 }
             }
         }
@@ -228,16 +211,5 @@ public class EKServer
         {
             _clientTasks.TryRemove(socket, out _);
         }
-    }
-
-    private ConcurrentDictionary<Guid, GameSession> GetSessionsDictionary()
-    {
-        // Конвертируем GameSessionManager в ConcurrentDictionary для совместимости
-        var dict = new ConcurrentDictionary<Guid, GameSession>();
-        foreach (var session in _sessionManager.GetActiveSessions())
-        {
-            dict.TryAdd(session.Id, session);
-        }
-        return dict;
     }
 }

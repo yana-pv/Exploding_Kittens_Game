@@ -14,9 +14,6 @@ public class Deck
     [JsonIgnore]
     public IReadOnlyList<Card> DiscardPile => _discardPile.AsReadOnly();
 
-    [JsonIgnore]
-    public bool IsEmpty => _drawPile.Count == 0;
-
     public void Initialize(List<Card> cards)
     {
         Shuffle(cards);
@@ -29,14 +26,6 @@ public class Deck
         {
             int j = _random.Next(i + 1);
             (cards[i], cards[j]) = (cards[j], cards[i]);
-        }
-    }
-
-    private void AddCards(List<Card> cards, CardType type, int count)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            cards.Add(Card.Create(type));
         }
     }
 
@@ -104,7 +93,5 @@ public class Deck
         Shuffle(cards);
         _drawPile = new Stack<Card>(cards);
         _discardPile.Clear();
-
-        Console.WriteLine($"Колода перемешана из сброса. Карт: {_drawPile.Count}");
     }
 }

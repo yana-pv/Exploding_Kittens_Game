@@ -52,10 +52,5 @@ public class GameSessionManager
         {
             _sessions.TryRemove(session.Id, out _);
         }
-
-        if (inactiveSessions.Count > 0)
-        {
-            Console.WriteLine($"Cleaned up {inactiveSessions.Count} inactive sessions");
-        }
     }
 }

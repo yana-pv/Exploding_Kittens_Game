@@ -11,7 +11,7 @@ public class DeckInitializer
 
         var random = new Random();
 
-        // ШАГ 1: Создаем колоду БЕЗ Взрывных Котят и Обезвредить
+        // Создаем колоду БЕЗ Взрывных Котят и Обезвредить
         var deckWithoutExplosives = new List<Card>();
 
         AddCards(deckWithoutExplosives, CardType.Nope, 5);
@@ -30,7 +30,7 @@ public class DeckInitializer
         // Перемешиваем
         Shuffle(deckWithoutExplosives, random);
 
-        // ШАГ 2: Раздаем по 4 карты каждому игроку
+        // Раздаем по 4 карты каждому игроку
         var playerHands = new List<List<Card>>();
         for (int i = 0; i < playerCount; i++)
         {
@@ -44,13 +44,13 @@ public class DeckInitializer
             playerHands.Add(hand);
         }
 
-        // ШАГ 3: Добавляем по 1 Обезвредить каждой руке
+        // Добавляем по 1 Обезвредить каждой руке
         foreach (var hand in playerHands)
         {
             hand.Add(Card.Create(CardType.Defuse));
         }
 
-        // ШАГ 4: Создаем финальную колоду из оставшихся карт + Взрывные Котята + оставшиеся Обезвредить
+        // Создаем финальную колоду из оставшихся карт + Взрывные Котята + оставшиеся Обезвредить
         var finalDeck = new List<Card>(deckWithoutExplosives);
 
         // Добавляем Взрывных Котят (игроки - 1)
@@ -65,7 +65,7 @@ public class DeckInitializer
         }
         else
         {
-            // Для 3+ игроков: 6 - playerCount (у каждого уже по 1)
+            // Для 3+ игроков: 6 - playerCount 
             remainingDefuses = 6 - playerCount;
             if (remainingDefuses < 0) remainingDefuses = 0;
         }

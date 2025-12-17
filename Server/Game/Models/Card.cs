@@ -12,12 +12,6 @@ public class Card
     [JsonIgnore]
     public bool IsCatCard => Type >= CardType.RainbowCat && Type <= CardType.TacoCat;
 
-    [JsonIgnore]
-    public bool IsActionCard => Type is >= CardType.Nope and <= CardType.SeeTheFuture;
-
-    [JsonIgnore]
-    public bool IsSpecialCard => Type == CardType.ExplodingKitten || Type == CardType.Defuse;
-
     public static Card Create(CardType type)
     {
         return type switch

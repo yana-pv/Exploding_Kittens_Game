@@ -1,6 +1,6 @@
 ﻿using Server.Game.Enums;
 using Server.Game.Models;
-using Server.Infrastructure; // Добавлено
+using Server.Infrastructure; 
 using Server.Networking.Protocol;
 using System.Net.Sockets;
 using System.Text;
@@ -10,7 +10,7 @@ namespace Server.Networking.Commands.Handlers;
 [Command(Command.CreateGame)]
 public class CreateGameHandler : ICommandHandler
 {
-    public async Task Invoke(Socket sender, GameSessionManager sessionManager, // <-- Изменено
+    public async Task Invoke(Socket sender, GameSessionManager sessionManager, 
         byte[]? payload = null, CancellationToken ct = default)
     {
         var playerName = payload != null && payload.Length > 0
@@ -36,8 +36,7 @@ public class CreateGameHandler : ICommandHandler
             return;
         }
 
-        // Добавляем в ОРИГИНАЛЬНЫЙ менеджер
-        sessionManager.CreateSession(session); // <-- Изменено: теперь добавляем в sessionManager
+        sessionManager.CreateSession(session); 
 
         await sender.SendAsync(KittensPackageBuilder.CreateGameResponse(session.Id, player.Id),
             SocketFlags.None);

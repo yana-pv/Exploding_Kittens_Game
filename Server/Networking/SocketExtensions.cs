@@ -18,12 +18,6 @@ public static class SocketExtensions
         await socket.SendAsync(KittensPackageBuilder.MessageResponse(message), SocketFlags.None);
     }
 
-    public static async Task SendGameState(this Socket socket, GameSession session)
-    {
-        await socket.SendAsync(KittensPackageBuilder.GameStateResponse(session.GetGameStateJson()),
-            SocketFlags.None);
-    }
-
     public static async Task SendPlayerHand(this Socket socket, Player player)
     {
         await socket.SendAsync(KittensPackageBuilder.PlayerHandResponse(player.Hand),

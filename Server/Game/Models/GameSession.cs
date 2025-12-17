@@ -24,7 +24,6 @@ public class GameSession
     public CardCounter CardCounter { get; private set; } = null!;
 
 
-    // Новые поля
     [JsonIgnore]
     public TurnManager TurnManager { get; private set; } = null!;
 
@@ -42,10 +41,6 @@ public class GameSession
 
     [JsonIgnore]
     public PendingFavorAction? PendingFavor { get; set; }
-
-    // Действие, ожидающее карту "Нет"
-    [JsonIgnore]
-    public PendingAction? PendingNopeAction { get; set; }
 
 
     public void InitializeTurnManager()
@@ -71,8 +66,6 @@ public class GameSession
         player.TurnOrder = Players.Count;
         Players.Add(player);
 
-        Log($"{player.Name} присоединился к игре");
-
         return true;
     }
 
@@ -89,8 +82,6 @@ public class GameSession
             CheckGameOver();
         }
 
-        Log($"{player.Name} покинул игру");
-
         return true;
     }
 
@@ -102,7 +93,6 @@ public class GameSession
         GameDeck = new Deck();
         CardCounter = new CardCounter();
 
-        // Используем новый метод для создания игры
         var (finalDeck, playerHands) = DeckInitializer.CreateGameSetup(Players.Count);
 
         // Раздаем карты игрокам
@@ -137,23 +127,16 @@ public class GameSession
         TurnsPlayed = 0;
 
         InitializeTurnManager();
-
-        Log($"Игра началась! Первым ходит {CurrentPlayer.Name}");
     }
 
     public void NextPlayer(bool force = false)
     {
         if (CurrentPlayer == null) return;
 
-        // Используем TurnManager для проверки завершения хода
         if (!force && !TurnManager.TurnEnded)
         {
-            // Ход еще не завершен
-            Console.WriteLine($"DEBUG NextPlayer: ход еще не завершен, force={force}");
             return;
         }
-
-        Console.WriteLine($"DEBUG NextPlayer: переходим от {CurrentPlayer?.Name}");
 
         int attempts = 0;
         do
@@ -161,8 +144,6 @@ public class GameSession
             CurrentPlayerIndex = (CurrentPlayerIndex + 1) % Players.Count;
             CurrentPlayer = Players[CurrentPlayerIndex];
             attempts++;
-
-            Console.WriteLine($"DEBUG NextPlayer: пытаемся игрока {CurrentPlayer.Name}, alive={CurrentPlayer.IsAlive}");
 
             if (attempts > Players.Count)
             {
@@ -173,10 +154,6 @@ public class GameSession
         while (!CurrentPlayer.IsAlive);
 
         TurnsPlayed++;
-        Console.WriteLine($"DEBUG NextPlayer: теперь ходит {CurrentPlayer.Name}, ExtraTurns={CurrentPlayer.ExtraTurns}");
-
-        // Сброс состояния хода для нового игрока
-        // TurnManager сам сбросится в CompleteTurnAsync()
     }
 
     public void EliminatePlayer(Player player)
@@ -189,12 +166,8 @@ public class GameSession
         }
         player.Hand.Clear();
 
-        Log($"{player.Name} выбыл из игры!");
-
-        // НОВОЕ: Отправляем сообщение выбывшему игроку
         SendEliminationMessageToPlayer(player);
 
-        // Если это текущий игрок, завершаем ход
         if (CurrentPlayer == player)
         {
             NextPlayer(true);
@@ -216,7 +189,6 @@ public class GameSession
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Не удалось отправить сообщение выбывшему игроку: {ex.Message}");
             }
         }
     }
@@ -228,20 +200,15 @@ public class GameSession
         {
             Winner = alivePlayers[0];
             State = GameState.GameOver;
-            Log($"🎉 {Winner.Name} победил!");
 
-            // НОВОЕ: Отправляем сообщение о победе победителю
             SendWinMessageToWinner(Winner);
 
-            // НОВОЕ: Отправляем сообщение о поражении остальным
             SendLoseMessageToOthers(alivePlayers[0]);
         }
         else if (alivePlayers.Count == 0)
         {
             State = GameState.GameOver;
-            Log("Игра окончена! Нет победителей.");
 
-            // НОВОЕ: Отправляем сообщение всем об отсутствии победителей
             SendNoWinnerMessage();
         }
     }
@@ -253,7 +220,6 @@ public class GameSession
         await winner.Connection.SendAsync(data, SocketFlags.None);
     }
 
-    // НОВЫЙ МЕТОД: Отправка сообщения проигравшим
     private async void SendLoseMessageToOthers(Player winner)
     {
         var message = $"🏆 Игра окончена! Победитель: {winner.Name}";
@@ -265,7 +231,6 @@ public class GameSession
         }
     }
 
-    // НОВЫЙ МЕТОД: Отправка сообщения об отсутствии победителей
     private async void SendNoWinnerMessage()
     {
         var message = "🏁 Игра окончена! Нет победителей.";
@@ -286,7 +251,6 @@ public class GameSession
             CurrentPlayerName = CurrentPlayer?.Name,
             AlivePlayers = Players.Count(p => p.IsAlive),
             CardsInDeck = GameDeck.CardsRemaining,
-            // Теперь эти свойства существуют:
             TurnsPlayed = TurnsPlayed,
             WinnerName = Winner?.Name,
             Players = Players.Select(p => new PlayerInfoDto
@@ -312,79 +276,7 @@ public class GameSession
             GameLog.RemoveAt(0);
     }
 
-    // Новый метод для обработки карты "Атаковать"
-    public void ApplyAttack(Player attacker, Player? target = null)
-    {
-        Console.WriteLine($"DEBUG ApplyAttack: Игрок {attacker.Name} атакует");
 
-        // 1. ТЕКУЩИЙ ХОД ЗАВЕРШАЕТСЯ БЕЗ ВЗЯТИЯ КАРТЫ
-        TurnManager.ForceEndTurn();
-        TurnManager.CardDrawn(); // Помечаем, что карта взята (чтобы не требовало draw)
-        NeedsToDrawCard = false;
-
-        // 2. Определяем СЛЕДУЮЩЕГО игрока (по умолчанию следующий по порядку)
-        Player? attackTarget = target;
-        if (attackTarget == null || !attackTarget.IsAlive)
-        {
-            // Находим следующего живого игрока
-            var nextIndex = CurrentPlayerIndex;
-            var attempts = 0;
-
-            do
-            {
-                nextIndex = (nextIndex + 1) % Players.Count;
-                attackTarget = Players[nextIndex];
-                attempts++;
-
-                if (attempts > Players.Count)
-                {
-                    Log("Нет живых игроков для атаки!");
-                    return;
-                }
-            }
-            while (!attackTarget.IsAlive);
-        }
-
-        // 3. ЦЕЛЬ ПОЛУЧАЕТ +1 дополнительный ход (всего будет ходить дважды)
-        // Важно: не ExtraTurns += 2, а настраиваем специальный флаг
-        attackTarget.ExtraTurns = 1; // Будет ходить на 1 раз больше
-
-        Log($"⚔️ {attacker.Name} атаковал! {attackTarget.Name} ходит дважды.");
-
-        // 4. НЕ переходим к следующему игроку здесь
-        // Это сделает TurnManager.CompleteTurnAsync() в основном методе
-
-        // 5. Устанавливаем специальный флаг для атакованного игрока
-        attackTarget.HasPendingAction = true; // или attackTarget.IsAttacked = true
-    }
-
-    private Player? GetNextAlivePlayer()
-    {
-        var index = CurrentPlayerIndex;
-        var attempts = 0;
-
-        do
-        {
-            index = (index + 1) % Players.Count;
-            attempts++;
-
-            if (attempts > Players.Count) return null;
-        }
-        while (!Players[index].IsAlive);
-
-        return Players[index];
-    }
-
-    // Структура для ожидающих действий
-    public class PendingAction
-    {
-        public required Player Player { get; set; }
-        public required Card Card { get; set; }
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-        public object? ActionData { get; set; }
-    }
-
-    // ДОБАВЬТЕ ЭТОТ КЛАСС:
     public class PendingFavorAction
     {
         public required Player Requester { get; set; }

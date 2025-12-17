@@ -7,18 +7,18 @@ public enum Command : byte
     JoinGame = 0x11,
     LeaveGame = 0x12,
     StartGame = 0x13,
-    EndTurn = 0x14,          // Новая команда для завершения хода
+    EndTurn = 0x14,          
 
     // Игровые действия
     PlayCard = 0x20,
     DrawCard = 0x21,
     UseCombo = 0x22,
-    TargetPlayer = 0x23,     // Для выбора карты в комбо 3/5
+    TargetPlayer = 0x23,     
     PlayNope = 0x24,
     PlayDefuse = 0x25,
     PlayFavor = 0x26,
-    StealCard = 0x27,        // НОВАЯ: Для кражи в комбо 2
-    TakeFromDiscard = 0x28,  // ← НОВАЯ КОМАНДА ДЛЯ КОМБО 5
+    StealCard = 0x27,        
+    TakeFromDiscard = 0x28,  
 
 
     // Информационные
@@ -38,5 +38,5 @@ public enum Command : byte
     GameOver = 0x48,
     Error = 0x49,
     Message = 0x4A,
-    NeedToDraw = 0x4B        // Новое сообщение - нужно взять карту
+    NeedToDraw = 0x4B       
 }

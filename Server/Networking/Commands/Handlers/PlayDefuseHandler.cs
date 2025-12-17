@@ -54,16 +54,14 @@ public class PlayDefuseHandler : ICommandHandler
             return;
         }
 
-        // Проверяем активный взрывной котенок с проверкой времени
         if (!_pendingExplosions.TryGetValue(player.Id, out var pending) ||
             pending.Session.Id != session.Id ||
-            (DateTime.UtcNow - pending.Timestamp).TotalSeconds > 31) // 1 секунда допуск
+            (DateTime.UtcNow - pending.Timestamp).TotalSeconds > 31) 
         {
             await player.Connection.SendMessage("❌ Слишком поздно! Время для обезвреживания истекло.");
             return;
         }
 
-        // Проверяем, есть ли у игрока карта Defuse
         if (!player.HasDefuseCard)
         {
             await player.Connection.SendMessage("❌ У вас нет карты Обезвредить!");
@@ -71,21 +69,17 @@ public class PlayDefuseHandler : ICommandHandler
             return;
         }
 
-        // Парсим позицию для возврата котенка в колоду
         if (!int.TryParse(parts[2], out var position) || position < 0)
         {
-            position = 0; // По умолчанию кладем наверх
+            position = 0; 
         }
 
-        // Ограничиваем максимальную позицию (например, не более 20 от верха)
         position = Math.Min(position, 20);
 
         try
         {
-            // Отменяем таймер ожидания
             pending.TimeoutToken?.Cancel();
 
-            // Находим взрывного котенка в руке игрока
             var explodingKitten = player.Hand.FirstOrDefault(c => c.Type == CardType.ExplodingKitten);
             if (explodingKitten == null)
             {
@@ -93,7 +87,6 @@ public class PlayDefuseHandler : ICommandHandler
                 return;
             }
 
-            // Убираем карту Defuse из руки
             var defuseCard = player.RemoveCard(CardType.Defuse);
             if (defuseCard == null)
             {
@@ -101,32 +94,25 @@ public class PlayDefuseHandler : ICommandHandler
                 return;
             }
 
-            // Убираем взрывного котенка из руки
             player.Hand.Remove(explodingKitten);
 
-            // Кладем Defuse в сброс
             session.GameDeck.Discard(defuseCard);
 
-            // Возвращаем взрывного котенка в колоду на указанную позицию
             session.GameDeck.InsertCard(explodingKitten, position);
 
-            // Очищаем информацию о pending взрыве
             _pendingExplosions.TryRemove(player.Id, out _);
 
             await session.BroadcastMessage($"✅ {player.Name} обезвредил Взрывного Котенка!");
             await session.BroadcastMessage($"{player.Name} вернул котенка в колоду на позицию {position} от верха.");
 
-            // После обезвреживания игрок должен продолжить ход
             if (session.TurnManager != null)
             {
                 session.TurnManager.CardDrawn();
                 await session.TurnManager.CompleteTurnAsync();
             }
 
-            // Обновляем руку игрока
             await player.Connection.SendPlayerHand(player);
 
-            // Отправляем сообщение об успешном обезвреживании
             await SendDefuseSuccessMessage(player, position);
 
             await session.BroadcastGameState();
@@ -137,7 +123,6 @@ public class PlayDefuseHandler : ICommandHandler
         }
     }
 
-    // Метод для отправки сообщения об успешном обезвреживании
     private async Task SendDefuseSuccessMessage(Player player, int position)
     {
         var message = $"🎯 Вы успешно обезвредили Взрывного Котенка! " +
@@ -147,7 +132,6 @@ public class PlayDefuseHandler : ICommandHandler
         await player.Connection.SendAsync(data, SocketFlags.None);
     }
 
-    // Метод для регистрации взрыва с таймером
     public static async void RegisterExplosion(GameSession session, Player player)
     {
         var timeoutToken = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -165,36 +149,27 @@ public class PlayDefuseHandler : ICommandHandler
         {
             await Task.Delay(30000, timeoutToken.Token);
 
-            // Если таймер не отменен, проверяем все еще ли ожидание активно
             if (_pendingExplosions.TryGetValue(player.Id, out var current) &&
                 current.Timestamp == pending.Timestamp)
             {
-                Console.WriteLine($"Таймаут! Игрок {player.Name} не обезвредил котенка");
                 await HandleTimeoutElimination(session, player);
             }
         }
         catch (TaskCanceledException)
         {
-            // Таймер отменен - игрок успел обезвредить
-            Console.WriteLine($"Игрок {player.Name} обезвредил котенка вовремя");
         }
     }
 
-    // Статический метод для обработки таймаута
     private static async Task HandleTimeoutElimination(GameSession session, Player player)
     {
-        // Убираем из ожидания
         _pendingExplosions.TryRemove(player.Id, out _);
 
-        // Проверяем, жив ли еще игрок
         if (!player.IsAlive) return;
 
-        // Отправляем сообщение о выбывании игроку
         var eliminationMessage = $"💥 Время вышло! Вы не успели обезвредить котенка и выбываете из игры.";
         var eliminationData = KittensPackageBuilder.MessageResponse(eliminationMessage);
         await player.Connection.SendAsync(eliminationData, SocketFlags.None);
 
-        // Отправляем сообщение другим игрокам
         await BroadcastEliminationMessageToAll(session, player.Name);
 
         if (player.HasDefuseCard)
@@ -210,13 +185,11 @@ public class PlayDefuseHandler : ICommandHandler
         await session.BroadcastGameState();
     }
 
-    // СТАТИЧЕСКИЙ метод для широковещательного сообщения о выбывании
     private static async Task BroadcastEliminationMessageToAll(GameSession session, string playerName)
     {
         var message = $"🚫 {playerName} выбыл из игры!";
         var data = KittensPackageBuilder.MessageResponse(message);
 
-        // Собираем задачи отправки сообщений всем игрокам
         var tasks = new List<Task>();
 
         foreach (var player in session.Players)
@@ -227,7 +200,6 @@ public class PlayDefuseHandler : ICommandHandler
             }
         }
 
-        // Отправляем всем игрокам параллельно
         if (tasks.Count > 0)
         {
             await Task.WhenAll(tasks);
@@ -239,10 +211,8 @@ public class PlayDefuseHandler : ICommandHandler
         return _pendingExplosions.ContainsKey(player.Id);
     }
 
-    // Метод выбывания игрока (нестатический, вызывается из Invoke)
     private async Task HandlePlayerElimination(GameSession session, Player player, bool fromDefuseHandler = false)
     {
-        // Очищаем информацию о взрыве
         if (_pendingExplosions.TryGetValue(player.Id, out var pending))
         {
             pending.TimeoutToken?.Cancel();
@@ -251,12 +221,10 @@ public class PlayDefuseHandler : ICommandHandler
 
         if (player.IsAlive)
         {
-            // Отправляем сообщение о выбывании игроку
             var eliminationMessage = "💥 Вы выбываете из игры!";
             var eliminationData = KittensPackageBuilder.MessageResponse(eliminationMessage);
             await player.Connection.SendAsync(eliminationData, SocketFlags.None);
 
-            // Отправляем сообщение другим игрокам
             await BroadcastEliminationMessageToAll(session, player.Name);
 
             await session.BroadcastMessage($"💥 {player.Name} выбывает из игры!");
