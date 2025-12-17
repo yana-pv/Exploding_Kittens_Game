@@ -1,6 +1,6 @@
 ﻿using Server.Networking.Commands;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 [ClientCommand(Command.NeedToDraw)]
 public class NeedToDrawHandler : IClientCommandHandler

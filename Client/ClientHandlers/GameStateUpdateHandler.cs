@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Server.Networking.Commands;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 [ClientCommand(Command.GameStateUpdate)]
 public class GameStateUpdateHandler : IClientCommandHandler

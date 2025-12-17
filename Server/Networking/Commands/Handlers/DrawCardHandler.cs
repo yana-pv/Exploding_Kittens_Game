@@ -1,6 +1,7 @@
 ﻿using Server.Game.Enums;
 using Server.Game.Models;
-using Server.Infrastructure; // Добавлено
+using Server.Infrastructure;
+using Server.Networking.Protocol;
 using System.Net.Sockets;
 using System.Text;
 
@@ -27,9 +28,8 @@ public class DrawCardHandler : ICommandHandler
             return;
         }
 
-        // Получаем сессию напрямую из менеджера
-        var session = sessionManager.GetSession(gameId); // <-- Изменено
-        if (session == null) // <-- Изменено условие
+        var session = sessionManager.GetSession(gameId);
+        if (session == null)
         {
             await sender.SendError(CommandResponse.GameNotFound);
             return;
@@ -70,7 +70,7 @@ public class DrawCardHandler : ICommandHandler
                 await player.Connection.SendMessage($"Вы взяли: {drawnCard.Name}");
                 await player.Connection.SendPlayerHand(player);
 
-                // ВАЖНО: Автоматически завершаем ход после взятия карты
+                // Автоматически завершаем ход после взятия карты
                 Console.WriteLine($"DEBUG DrawCard: вызываем CompleteTurnAsync()");
                 await session.TurnManager.CompleteTurnAsync();
 
@@ -93,20 +93,15 @@ public class DrawCardHandler : ICommandHandler
     {
         await session.BroadcastMessage($"💥 {player.Name} вытащил Взрывного Котенка!");
 
-        // Если колода пуста, перемешиваем сброс
-        if (session.GameDeck.IsEmpty)
-        {
-            await session.BroadcastMessage("Колода пуста, перемешиваем сброс...");
-            // Колода автоматически перемешает сброс при следующем Draw()
-        }
+        // Отправляем срочное сообщение игроку
+        await SendUrgentExplosionMessage(player, session);
 
         if (player.HasDefuseCard)
         {
-            PlayDefuseHandler.RegisterExplosion(player);
+            PlayDefuseHandler.RegisterExplosion(session, player);
 
-            await player.Connection.SendMessage("У вас есть карта Обезвредить! Используйте команду:");
-            await player.Connection.SendMessage($"defuse {session.Id} {player.Id} [позиция]");
-            await player.Connection.SendMessage("Где [позиция] - куда вернуть котенка в колоду (0 - наверх).");
+            // Отправляем подробные инструкции
+            await SendDefuseInstructions(player, session);
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
@@ -121,23 +116,66 @@ public class DrawCardHandler : ICommandHandler
             }
             catch (TaskCanceledException)
             {
-                // Игрок успел использовать Defuse
+                // Игрок успел использовать Defuse - сообщение будет отправлено из PlayDefuseHandler
+                Console.WriteLine($"Игрок {player.Name} обезвредил котенка вовремя");
             }
         }
         else
         {
+            // Отправляем сообщение об отсутствии дефуза
+            await SendNoDefuseMessage(player);
             await HandlePlayerElimination(session, player, kittenCard);
         }
+    }
 
-        // ВАЖНО: После обработки Взрывного Котенка ход НЕ переходит автоматически
-        // Если игрок обезвредил - он продолжает ход
-        // Если игрок выбыл - переход происходит в HandlePlayerElimination
+    // Метод: Инструкции по обезвреживанию
+    private async Task SendDefuseInstructions(Player player, GameSession session)
+    {
+        // Делаем сообщение КОРОЧЕ, чтобы не обрезалось
+        var shortInstructions = new[]
+        {
+        $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас 30 сек!",
+        $"ID игры: {session.Id}",
+        $"Ваш ID: {player.Id}",
+        $"Команда: defuse {session.Id} {player.Id} [0-5]",
+        $"Коротко: defuse [позиция] (клиент добавит ID)"
+    };
+
+        // Отправляем несколько коротких сообщений
+        foreach (var message in shortInstructions)
+        {
+            var data = KittensPackageBuilder.MessageResponse(message);
+            await player.Connection.SendAsync(data, SocketFlags.None);
+            await Task.Delay(50);
+        }
+    }
+
+    // Метод: Срочное сообщение о взрывном котенке
+    private async Task SendUrgentExplosionMessage(Player player, GameSession session)
+    {
+        // СДЕЛАТЬ СООБЩЕНИЕ КОРОЧЕ
+        var urgentMessage = player.HasDefuseCard
+            ? $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас есть Обезвредить!\nУ вас 30 секунд!"
+            : $"💣 ВЗРЫВНОЙ КОТЕНОК! Нет Обезвредить!\n💥 Вы выбываете!";
+
+        var data = KittensPackageBuilder.MessageResponse(urgentMessage);
+        await player.Connection.SendAsync(data, SocketFlags.None);
+    }
+
+    // Метод: Сообщение об отсутствии дефуза
+    private async Task SendNoDefuseMessage(Player player)
+    {
+        var message = "❌ У вас нет карты Обезвредить!\n" +
+                     "💥 Вы выбываете из игры!";
+
+        var data = KittensPackageBuilder.MessageResponse(message);
+        await player.Connection.SendAsync(data, SocketFlags.None);
     }
 
     private async Task HandlePlayerElimination(GameSession session, Player player, Card kittenCard)
     {
+        // Игрок выбывает через метод сессии, который теперь отправляет сообщения
         session.EliminatePlayer(player);
-        await session.BroadcastMessage($"{player.Name} выбывает из игры!");
 
         // Переход к следующему игроку через TurnManager
         await session.TurnManager.CompleteTurnAsync();
@@ -145,7 +183,7 @@ public class DrawCardHandler : ICommandHandler
         if (session.State != GameState.GameOver && session.CurrentPlayer != null)
         {
             await session.BroadcastMessage($"🎮 Ходит {session.CurrentPlayer.Name}");
-            await session.CurrentPlayer.Connection.SendMessage("Ваш ход! Вы можете сыграть карту или взять карту из колоды.");
+            await session.CurrentPlayer.Connection.SendMessage("Ваш ход!");
         }
     }
 }

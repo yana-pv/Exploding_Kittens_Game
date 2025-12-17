@@ -1,6 +1,6 @@
 ﻿using Server.Networking.Commands;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 [AttributeUsage(AttributeTargets.Class)]
 public class ClientCommandAttribute(Command command) : Attribute

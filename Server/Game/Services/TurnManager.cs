@@ -296,12 +296,14 @@ public class TurnManager
     }
 
     // ИЗМЕНЕНО: public вместо private
-    public void ResetSkipAttackFlags()
+    public void ResetAttackFlag()
     {
-        _skipPlayed = false;
         _attackPlayed = false;
-        _turnEnded = false;
-        Console.WriteLine($"DEBUG ResetSkipAttackFlags: флаги сброшены");
+        if (!_skipPlayed) // Если не сыграли Skip, ход не завершен
+        {
+            _turnEnded = false;
+        }
+        Console.WriteLine($"DEBUG ResetAttackFlag: _attackPlayed={_attackPlayed}, _turnEnded={_turnEnded}");
     }
 
     // Новый метод для проверки, был ли ход завершен картой

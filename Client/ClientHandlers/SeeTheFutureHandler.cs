@@ -1,7 +1,7 @@
 ﻿using Server.Networking.Commands;
 using System.Text;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 [ClientCommand(Command.CardPlayed)]
 public class SeeTheFutureHandler : IClientCommandHandler

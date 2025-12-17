@@ -1,4 +1,5 @@
-﻿using Server.Game.Enums;
+﻿using Client.ClientHandlers;
+using Server.Game.Enums;
 using Server.Game.Models;
 using Server.Networking.Commands;
 using Server.Networking.Protocol;
@@ -12,6 +13,9 @@ public class GameClient
     private readonly Socket _socket;
     private readonly KittensClientHelper _helper;
     private readonly ClientCommandHandlerFactory _handlerFactory;
+
+    public Guid? _lastActiveActionId = null;
+
 
     public Guid? SessionId { get; set; }
     public Guid PlayerId { get; set; }
@@ -345,32 +349,44 @@ public class GameClient
         switch (comboType)
         {
             case 2:
-                targetData = await GetTargetForCombo2();
-                if (targetData == null) return;
+                // Для комбо 2 нужен только ID цели
+                if (parts.Length > 3)
+                {
+                    targetData = parts[3];
+                }
+                else
+                {
+                    // Запрашиваем ID цели
+                    await DisplayOtherPlayers();
+                    Console.Write("\nВведите ID целевого игрока: ");
+                    var targetId = ReadLineSafe();
+
+                    if (string.IsNullOrEmpty(targetId) || !Guid.TryParse(targetId, out _))
+                    {
+                        Console.WriteLine("❌ Неверный ID игрока!");
+                        return;
+                    }
+                    targetData = targetId;
+                }
                 Console.WriteLine($"✅ Цель для комбо 2: {targetData}");
                 break;
 
             case 3:
-                targetData = await GetTargetForCombo3();
-                if (targetData == null) return;
-
-                // ОТЛАДОЧНАЯ ПРОВЕРКА
-                Console.WriteLine($"DEBUG: Данные комбо 3: '{targetData}'");
-
-                if (string.IsNullOrEmpty(targetData) || !targetData.Contains('|'))
+                // Для комбо 3 нужен ID цели и название карты
+                if (parts.Length > 3)
                 {
-                    Console.WriteLine($"❌ Ошибка: Неверный формат данных");
+                    targetData = parts[3];
+                    if (parts.Length > 4)
+                    {
+                        targetData += $"|{parts[4]}";
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("❌ Для комбо 3 укажите ID цели и название карты");
+                    Console.WriteLine("💡 Пример: combo 3 0,1,2 [ID_цели] [название_карты]");
                     return;
                 }
-
-                var targetParts = targetData.Split('|');
-                if (targetParts.Length != 2 || string.IsNullOrEmpty(targetParts[1]))
-                {
-                    Console.WriteLine($"❌ Ошибка: Нет названия карта");
-                    return;
-                }
-
-                Console.WriteLine($"✅ Проверка: ID='{targetParts[0]}', карта='{targetParts[1]}'");
                 break;
 
             case 5:
@@ -382,11 +398,11 @@ public class GameClient
         {
             Console.WriteLine($"📤 Отправка комбо на сервер...");
 
-            // ИСПРАВЛЕНИЕ: Отправляем ИНДЕКСЫ карт, а не типы
+            // Отправляем индексы карт
             var indicesStr = string.Join(",", cardIndices);
             Console.WriteLine($"DEBUG: Отправляемые индексы карт: {indicesStr}");
 
-            // Используем существующий метод SendUseCombo, который принимает индексы
+            // Используем существующий метод SendUseCombo
             await _helper.SendUseCombo(SessionId.Value, PlayerId, comboType, cardIndices, targetData);
 
             Console.WriteLine($"✅ Команда комбо отправлена!");
@@ -394,7 +410,6 @@ public class GameClient
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Ошибка отправки комбо: {ex.Message}");
-            Console.WriteLine($"   Stack trace: {ex.StackTrace}");
         }
     }
 
@@ -591,26 +606,7 @@ public class GameClient
         }
     }
 
-    private void DisplayHelpForCombo(int comboType)
-    {
-        switch (comboType)
-        {
-            case 2:
-                Console.WriteLine("💡 Формат для комбо 2 (Слепой карманник):");
-                Console.WriteLine("   combo 2 [номера_карт] [ID_целевого_игрока]");
-                Console.WriteLine("   Пример: combo 2 0,1 550e8400-e29b-41d4-a716-446655440000");
-                break;
 
-            case 3:
-                Console.WriteLine("💡 Формат для комбо 3 (Время рыбачить):");
-                Console.WriteLine("   combo 3 [номера_карт] [ID_целевого_игрока] [название_карты]");
-                Console.WriteLine("   Пример: combo 3 0,1,2 550e8400... Пропустить");
-                Console.WriteLine("   Пример: combo 3 0,1,2 550e8400... Атаковать");
-                Console.WriteLine("   Пример: combo 3 0,1,2 550e8400... Обезвредить");
-                Console.WriteLine("   Пример: combo 3 0,1,2 550e8400... Заглянуть в будущее");
-                break;
-        }
-    }
 
     private async Task HandleNopeCommand(string[] parts)
     {
@@ -620,21 +616,69 @@ public class GameClient
             return;
         }
 
-        await _helper.SendPlayNope(SessionId.Value, PlayerId);
-        Console.WriteLine("Играем карту НЕТ!");
+        Guid actionId;
+
+        // Если команда просто "nope" без параметров
+        if (parts.Length == 1)
+        {
+            if (_lastActiveActionId.HasValue)
+            {
+                Console.WriteLine($"💡 Использую последнее действие: {_lastActiveActionId}");
+                actionId = _lastActiveActionId.Value;
+            }
+            else
+            {
+                Console.WriteLine("❌ Необходимо указать ID действия!");
+                Console.WriteLine("💡 ID действия можно увидеть в сообщении об атаке/комбо");
+                Console.WriteLine("📋 Формат: nope [ID_действия]");
+                return;
+            }
+        }
+        else if (!Guid.TryParse(parts[1], out actionId))
+        {
+            Console.WriteLine("❌ Неверный формат ID действия!");
+            return;
+        }
+
+        Console.WriteLine($"🚫 Играю карту НЕТ на действие {actionId}");
+        await _helper.SendPlayNope(SessionId.Value, PlayerId, actionId);
     }
 
     private async Task HandleDefuseCommand(string[] parts)
     {
-        if (!SessionId.HasValue)
+        if (!SessionId.HasValue || PlayerId == Guid.Empty)
         {
             Console.WriteLine("Вы не в игре.");
             return;
         }
 
-        var position = parts.Length > 1 && int.TryParse(parts[1], out var pos) ? pos : 0;
+        // Всегда используем текущие ID сессии и игрока
+        int position = 0;
+
+        if (parts.Length < 2)
+        {
+            Console.WriteLine("❌ Использование: defuse [позиция]");
+            Console.WriteLine($"💡 Пример: defuse 0 (положить наверх)");
+            Console.WriteLine($"💡 Пример: defuse 4 (положить на 5-ю позицию)");
+            return;
+        }
+
+        if (!int.TryParse(parts[1], out position))
+        {
+            Console.WriteLine("❌ Неверная позиция! Используйте число 0-5");
+            return;
+        }
+
+        // Ограничиваем позицию
+        position = Math.Min(position, 5);
+
+        Console.WriteLine($"💣 Отправка команды...");
+        Console.WriteLine($"   Game ID: {SessionId}");
+        Console.WriteLine($"   Player ID: {PlayerId}");
+        Console.WriteLine($"   Position: {position}");
+
         await _helper.SendPlayDefuse(SessionId.Value, PlayerId, position);
-        Console.WriteLine($"Играем карту Обезвредить, позиция в колоде: {position}");
+        Console.WriteLine($"✅ Команда отправлена!");
     }
 
     private async Task ListenForServerMessages()

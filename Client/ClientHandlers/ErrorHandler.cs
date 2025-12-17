@@ -1,7 +1,7 @@
 ﻿using Server.Game.Enums;
 using Server.Networking.Commands;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 [ClientCommand(Command.Error)]
 public class ErrorHandler : IClientCommandHandler

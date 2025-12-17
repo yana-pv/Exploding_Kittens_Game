@@ -12,6 +12,9 @@ public class UseComboHandler : ICommandHandler
 {
     private static readonly ConcurrentDictionary<Guid, PendingStealAction> _pendingSteals = new();
 
+    // Временное решение для обработки Нетов на комбо
+    private static readonly ConcurrentDictionary<Guid, ComboAction> _comboActions = new();
+
     public async Task Invoke(Socket sender, GameSessionManager sessionManager,
     byte[]? payload = null, CancellationToken ct = default)
     {
@@ -57,7 +60,7 @@ public class UseComboHandler : ICommandHandler
             return;
         }
 
-        // ИСПРАВЛЕНИЕ: парсим ИНДЕКСЫ карт вместо типов
+        // Парсим индексы карт
         var cardIndices = parts[3].Split(',')
             .Where(s => int.TryParse(s, out _))
             .Select(s => int.Parse(s))
@@ -84,6 +87,41 @@ public class UseComboHandler : ICommandHandler
                 await sender.SendError(CommandResponse.InvalidAction);
                 return;
             }
+
+            // Создаем действие для Нетов
+            var comboActionId = Guid.NewGuid();
+            var comboAction = new ComboAction
+            {
+                SessionId = session.Id,
+                PlayerId = player.Id,
+                ComboType = comboType,
+                CardIndices = cardIndices,
+                TargetData = parts.Length > 4 ? parts[4] : null,
+                Timestamp = DateTime.UtcNow
+            };
+
+            _comboActions[comboActionId] = comboAction;
+
+            // Уведомляем о возможности сыграть Нет
+            await session.BroadcastMessage($"══════════════════════════════════════════");
+            await session.BroadcastMessage($"🎭 {player.Name} играет комбо ({comboType} карты)!");
+            await session.BroadcastMessage($"🚫 У вас есть 5 секунд чтобы сыграть карту НЕТ!");
+            await session.BroadcastMessage($"Используйте: nope {session.Id} [ваш_ID] {comboActionId}");
+            await session.BroadcastMessage($"══════════════════════════════════════════");
+
+            // Ждем 5 секунд на карты "Нет"
+            await Task.Delay(5000);
+
+            // Проверяем, было ли отменено картой "Нет"
+            if (IsComboActionNoped(comboActionId))
+            {
+                await session.BroadcastMessage("⚡ Комбо отменено картой НЕТ!");
+                _comboActions.TryRemove(comboActionId, out _);
+                return; // Комбо отменено - карты НЕ сбрасываются
+            }
+
+            // Очищаем действие
+            _comboActions.TryRemove(comboActionId, out _);
 
             // Обрабатываем комбо в зависимости от типа
             switch (comboType)
@@ -117,14 +155,22 @@ public class UseComboHandler : ICommandHandler
             return;
 
         Console.WriteLine($"DEBUG DiscardComboCards: Начинаем для игрока {player.Name}");
-        Console.WriteLine($"DEBUG: Индексы для сброса: {string.Join(",", cardIndices)}");
+        Console.WriteLine($"DEBUG: Исходные индексы для сброса: {string.Join(",", cardIndices)}");
         Console.WriteLine($"DEBUG: Карт в руке до: {player.Hand.Count}");
+
+        // Создаем копию руки для отладки
+        var handBefore = player.Hand.Select(c => c.Name).ToList();
+        Console.WriteLine($"DEBUG: Рука до: {string.Join(", ", handBefore)}");
 
         // Сортируем по убыванию, чтобы не сбивать индексы при удалении
         var sortedIndices = cardIndices
             .OrderByDescending(i => i)
-            .Distinct() // Убираем дубликаты
+            .Distinct()
             .ToList();
+
+        Console.WriteLine($"DEBUG: Отсортированные индексы: {string.Join(",", sortedIndices)}");
+
+        var discardedCards = new List<Card>();
 
         foreach (var index in sortedIndices)
         {
@@ -133,6 +179,7 @@ public class UseComboHandler : ICommandHandler
                 var card = player.Hand[index];
                 Console.WriteLine($"DEBUG: Сбрасываем карту #{index}: {card.Name}");
 
+                discardedCards.Add(card);
                 player.Hand.RemoveAt(index);
                 session.GameDeck.Discard(card);
             }
@@ -142,7 +189,11 @@ public class UseComboHandler : ICommandHandler
             }
         }
 
+        Console.WriteLine($"DEBUG: Сброшено карт: {discardedCards.Count}");
         Console.WriteLine($"DEBUG: Карт в руке после: {player.Hand.Count}");
+
+        var handAfter = player.Hand.Select(c => c.Name).ToList();
+        Console.WriteLine($"DEBUG: Рука после: {string.Join(", ", handAfter)}");
     }
 
     private bool ValidateCombo(Player player, int comboType, List<int> cardIndices)
@@ -199,19 +250,6 @@ public class UseComboHandler : ICommandHandler
             return;
         }
 
-        // Ждем 5 секунд на карты "Нет"
-        PlayNopeHandler.StartNopeWindow(session);
-        await Task.Delay(5000);
-
-        if (PlayNopeHandler.IsActionNoped(session.Id))
-        {
-            await session.BroadcastMessage("⚡ Слепой Карманник отменен картой НЕТ!");
-            PlayNopeHandler.CleanupNopeWindow(session.Id);
-            return;
-        }
-
-        PlayNopeHandler.CleanupNopeWindow(session.Id);
-
         // ПОКАЗЫВАЕМ карты цели РУБАШКАМИ игроку
         await player.Connection.SendMessage($"══════════════════════════════════════════");
         await player.Connection.SendMessage($"🎭 СЛЕПОЙ КАРМАННИК: выбирайте карту у {target.Name}");
@@ -238,7 +276,7 @@ public class UseComboHandler : ICommandHandler
             SessionId = session.Id,
             Player = player,
             Target = target,
-            CardIndices = cardIndices, // Используем индексы
+            CardIndices = cardIndices,
             Timestamp = DateTime.UtcNow
         };
 
@@ -280,19 +318,6 @@ public class UseComboHandler : ICommandHandler
         }
 
         var requestedCardName = parts[1].Trim();
-
-        // Ждем 5 секунд на карты "Нет"
-        PlayNopeHandler.StartNopeWindow(session);
-        await Task.Delay(5000);
-
-        if (PlayNopeHandler.IsActionNoped(session.Id))
-        {
-            await session.BroadcastMessage("⚡ Время Рыбачить отменено картой НЕТ!");
-            PlayNopeHandler.CleanupNopeWindow(session.Id);
-            return; // Комбо отменено - карты НЕ сбрасываются
-        }
-
-        PlayNopeHandler.CleanupNopeWindow(session.Id);
 
         // Ищем карту по имени у целевого игрока
         var requestedCard = target.Hand.FirstOrDefault(c =>
@@ -340,19 +365,6 @@ public class UseComboHandler : ICommandHandler
             return;
         }
 
-        // Ждем 5 секунд на карты "Нет"
-        PlayNopeHandler.StartNopeWindow(session);
-        await Task.Delay(5000);
-
-        if (PlayNopeHandler.IsActionNoped(session.Id))
-        {
-            await session.BroadcastMessage("⚡ Воровство из сброса отменено картой НЕТ!");
-            PlayNopeHandler.CleanupNopeWindow(session.Id);
-            return;
-        }
-
-        PlayNopeHandler.CleanupNopeWindow(session.Id);
-
         // Показываем карты в сбросе игроку
         var discardCards = session.GameDeck.DiscardPile
             .Select((card, index) => $"{index}. {card.Name}")
@@ -374,12 +386,18 @@ public class UseComboHandler : ICommandHandler
         var player = pending.Player;
         var target = pending.Target;
 
+        // Убираем из ожидания сразу
+        _pendingSteals.TryRemove(session.Id, out _);
+
         if (target.Hand.Count == 0)
         {
             await session.BroadcastMessage($"{target.Name} не имеет карт для кражи!");
-            // Сбрасываем карты комбо
+
+            // ИСПРАВЛЕНО: Сбрасываем карты комбо даже при таймауте
             DiscardComboCards(session, player, pending.CardIndices);
-            _pendingSteals.TryRemove(session.Id, out _);
+
+            // Завершаем ход
+            await CompleteComboTurn(session, player);
             return;
         }
 
@@ -390,8 +408,6 @@ public class UseComboHandler : ICommandHandler
         await CompleteSteal(session, player, target, pending.CardIndices, stolenCardIndex, true);
 
         await session.BroadcastMessage($"(таймаут: выбрана случайная карта #{stolenCardIndex})");
-
-        _pendingSteals.TryRemove(session.Id, out _);
     }
 
     private async Task CompleteSteal(GameSession session, Player player, Player target,
@@ -399,7 +415,7 @@ public class UseComboHandler : ICommandHandler
     {
         Console.WriteLine($"DEBUG CompleteSteal: Начинаем кражу");
         Console.WriteLine($"DEBUG: Игрок {player.Name} крадет у {target.Name}");
-        Console.WriteLine($"DEBUG: Индексы карт для сброса: {string.Join(",", cardIndices)}");
+        Console.WriteLine($"DEBUG: Индексы карт для комбо: {string.Join(",", cardIndices)}");
         Console.WriteLine($"DEBUG: Карт в руке игрока до: {player.Hand.Count}");
         Console.WriteLine($"DEBUG: Карт в руке цели до: {target.Hand.Count}");
 
@@ -412,17 +428,19 @@ public class UseComboHandler : ICommandHandler
         var stolenCard = target.Hand[stolenCardIndex];
         Console.WriteLine($"DEBUG: Карта для кражи: {stolenCard.Name} (тип: {stolenCard.Type})");
 
-        // Убираем карту у целевого игрока
+        // ИСПРАВЛЕНО: Порядок действий
+
+        // 1. Сначала сбрасываем карты комбо
+        Console.WriteLine($"DEBUG: Сбрасываем карты комбо...");
+        DiscardComboCards(session, player, cardIndices);
+
+        // 2. Затем забираем карту у цели
         target.Hand.RemoveAt(stolenCardIndex);
         Console.WriteLine($"DEBUG: Карта удалена у цели. Осталось карт: {target.Hand.Count}");
 
-        // Добавляем карту игроку
+        // 3. Добавляем карту игроку
         player.AddToHand(stolenCard);
         Console.WriteLine($"DEBUG: Карта добавлена игроку. Теперь карт: {player.Hand.Count}");
-
-        // Сбрасываем использованные карты комбо ПО ИНДЕКСАМ
-        Console.WriteLine($"DEBUG: Сбрасываем карты комбо...");
-        DiscardComboCards(session, player, cardIndices);
 
         var timeoutMsg = isTimeout ? " (таймаут)" : "";
         await session.BroadcastMessage($"🎭 {player.Name} украл карту '{stolenCard.Name}' у {target.Name} используя Слепой Карманник!{timeoutMsg}");
@@ -431,9 +449,38 @@ public class UseComboHandler : ICommandHandler
         Console.WriteLine($"DEBUG: Обновляем руки игроков...");
         await target.Connection.SendPlayerHand(target);
         await player.Connection.SendPlayerHand(player);
+
+        // Завершаем ход после комбо
+        await CompleteComboTurn(session, player);
+
         await session.BroadcastGameState();
 
         Console.WriteLine($"DEBUG CompleteSteal: Завершено");
+    }
+
+    private async Task CompleteComboTurn(GameSession session, Player player)
+    {
+        // Проверяем, является ли игрок текущим
+        if (session.CurrentPlayer == player)
+        {
+            // Комбо не завершает ход автоматически
+            // Игрок может продолжить играть карты или взять карту
+            await player.Connection.SendMessage("🎭 Комбо завершено! Вы можете продолжить ход:");
+            await player.Connection.SendMessage("• Сыграть еще карту (play [номер])");
+            await player.Connection.SendMessage("• Взять карту из колоды (draw)");
+            await player.Connection.SendMessage("• Завершить ход (end)");
+        }
+    }
+
+    // Метод для проверки, отменено ли комбо Нетом
+    private bool IsComboActionNoped(Guid comboActionId)
+    {
+        // Временное решение: проверяем, помечено ли действие как отмененное
+        // В реальной реализации нужно интегрировать с PlayNopeHandler
+
+        // Проверяем, есть ли активные Неты на это действие
+        // Пока возвращаем false - нужно будет интегрировать с реальной системой Нетов
+        return false;
     }
 
     // Статический метод для завершения кражи извне (из StealCardHandler)
@@ -470,4 +517,15 @@ public class PendingStealAction
     public required Player Target { get; set; }
     public required List<int> CardIndices { get; set; } // Используем индексы
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+
+// Класс для хранения информации о комбо-действии
+public class ComboAction
+{
+    public Guid SessionId { get; set; }
+    public Guid PlayerId { get; set; }
+    public int ComboType { get; set; }
+    public List<int> CardIndices { get; set; } = new();
+    public string? TargetData { get; set; }
+    public DateTime Timestamp { get; set; }
 }

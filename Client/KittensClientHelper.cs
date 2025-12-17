@@ -67,9 +67,9 @@ public class KittensClientHelper(Socket socket)
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
-    public Task SendPlayNope(Guid gameId, Guid playerId)
+    public Task SendPlayNope(Guid gameId, Guid playerId, Guid actionId)
     {
-        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}");
+        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{actionId}");
         var package = new KittensPackageBuilder(payload, Command.PlayNope);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }

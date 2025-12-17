@@ -1,7 +1,7 @@
 ﻿using Server.Networking.Commands;
 using System.Reflection;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 public class ClientCommandHandlerFactory
 {

@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using Server.Networking.Commands;
 
-namespace Client;
+namespace Client.ClientHandlers;
 
 [ClientCommand(Command.PlayerEliminated)]
 public class PlayerEliminatedHandler : IClientCommandHandler

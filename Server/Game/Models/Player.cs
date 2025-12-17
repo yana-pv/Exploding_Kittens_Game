@@ -16,6 +16,8 @@ public class Player
     public bool IsProtected { get; set; }
     public bool IsAttacked { get; set; } = false; // Атакован ли игрок
     public int TurnsRemaining { get; set; } = 1;  // Сколько ходов осталось
+    public List<PendingNopeAction> PendingNopeActions { get; } = new();
+
 
     [JsonIgnore]
     public bool HasDefuseCard => Hand.Any(c => c.Type == CardType.Defuse);
@@ -133,5 +135,13 @@ public class Player
         IsAttacked = false;
         TurnsRemaining = 1;
         ExtraTurns = 0;
+    }
+
+    public class PendingNopeAction
+    {
+        public Guid SessionId { get; set; }
+        public Guid ActionId { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string Description { get; set; } = string.Empty;
     }
 }

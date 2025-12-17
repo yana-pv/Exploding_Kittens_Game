@@ -5,7 +5,7 @@ using Server.Networking.Commands; // Для Command
 using System.Text;
 using System.Text.Json;
 
-namespace Client; // или какое у вас пространство имён
+namespace Client.ClientHandlers;
 
 [ClientCommand(Command.PlayerHandUpdate)]
 public class PlayerHandUpdateHandler : IClientCommandHandler

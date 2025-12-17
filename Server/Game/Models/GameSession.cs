@@ -1,5 +1,6 @@
 ﻿using Server.Game.Enums;
 using Server.Game.Services;
+using Server.Networking.Protocol;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -190,6 +191,9 @@ public class GameSession
 
         Log($"{player.Name} выбыл из игры!");
 
+        // НОВОЕ: Отправляем сообщение выбывшему игроку
+        SendEliminationMessageToPlayer(player);
+
         // Если это текущий игрок, завершаем ход
         if (CurrentPlayer == player)
         {
@@ -199,6 +203,23 @@ public class GameSession
         CheckGameOver();
     }
 
+    private async void SendEliminationMessageToPlayer(Player player)
+    {
+        var message = "💥 Вы выбыли из игры!";
+        var data = KittensPackageBuilder.MessageResponse(message);
+
+        if (player.Connection != null && player.Connection.Connected)
+        {
+            try
+            {
+                await player.Connection.SendAsync(data, SocketFlags.None);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Не удалось отправить сообщение выбывшему игроку: {ex.Message}");
+            }
+        }
+    }
     private void CheckGameOver()
     {
         var alivePlayers = Players.Where(p => p.IsAlive).ToList();
@@ -208,11 +229,51 @@ public class GameSession
             Winner = alivePlayers[0];
             State = GameState.GameOver;
             Log($"🎉 {Winner.Name} победил!");
+
+            // НОВОЕ: Отправляем сообщение о победе победителю
+            SendWinMessageToWinner(Winner);
+
+            // НОВОЕ: Отправляем сообщение о поражении остальным
+            SendLoseMessageToOthers(alivePlayers[0]);
         }
         else if (alivePlayers.Count == 0)
         {
             State = GameState.GameOver;
             Log("Игра окончена! Нет победителей.");
+
+            // НОВОЕ: Отправляем сообщение всем об отсутствии победителей
+            SendNoWinnerMessage();
+        }
+    }
+
+    private async void SendWinMessageToWinner(Player winner)
+    {
+        var message = "🎉 ПОБЕДА! Вы выиграли игру!";
+        var data = KittensPackageBuilder.MessageResponse(message);
+        await winner.Connection.SendAsync(data, SocketFlags.None);
+    }
+
+    // НОВЫЙ МЕТОД: Отправка сообщения проигравшим
+    private async void SendLoseMessageToOthers(Player winner)
+    {
+        var message = $"🏆 Игра окончена! Победитель: {winner.Name}";
+        var data = KittensPackageBuilder.MessageResponse(message);
+
+        foreach (var player in Players.Where(p => p != winner && p.Connection != null))
+        {
+            await player.Connection.SendAsync(data, SocketFlags.None);
+        }
+    }
+
+    // НОВЫЙ МЕТОД: Отправка сообщения об отсутствии победителей
+    private async void SendNoWinnerMessage()
+    {
+        var message = "🏁 Игра окончена! Нет победителей.";
+        var data = KittensPackageBuilder.MessageResponse(message);
+
+        foreach (var player in Players.Where(p => p.Connection != null))
+        {
+            await player.Connection.SendAsync(data, SocketFlags.None);
         }
     }
 
