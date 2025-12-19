@@ -1,5 +1,5 @@
-﻿using Server.Networking.Commands;
-using Server.Networking.Protocol;
+﻿using Shared.Models;
+using Shared.Protocol;
 using System.Net.Sockets;
 using System.Text;
 
@@ -10,24 +10,16 @@ public class KittensClientHelper(Socket socket)
     public Task SendCreateGame(string playerName)
     {
         var payload = Encoding.UTF8.GetBytes(playerName);
-        Console.WriteLine($"SendCreateGame payload: '{playerName}', length: {payload.Length}");
         var package = new KittensPackageBuilder(payload, Command.CreateGame);
-        var packageBytes = package.Build();
-        Console.WriteLine($"Package length: {packageBytes.Length}");
-        Console.WriteLine($"Package bytes: {BitConverter.ToString(packageBytes)}");
-        return socket.SendAsync(packageBytes, SocketFlags.None);
+        return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
     public Task SendJoinGame(Guid gameId, string playerName)
     {
         var payloadString = $"{gameId}:{playerName}";
         var payload = Encoding.UTF8.GetBytes(payloadString);
-        Console.WriteLine($"SendJoinGame PAYLOAD STRING: '{payloadString}', length: {payloadString.Length}");
-        Console.WriteLine($"SendJoinGame PAYLOAD BYTES: {BitConverter.ToString(payload)}"); // <-- Добавить
         var package = new KittensPackageBuilder(payload, Command.JoinGame);
-        var packageBytes = package.Build(); // <-- Добавить
-        Console.WriteLine($"SendJoinGame PACKAGE BYTES: {BitConverter.ToString(packageBytes)}"); // <-- Добавить
-        return socket.SendAsync(packageBytes, SocketFlags.None);
+        return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
     public Task SendStartGame(Guid gameId)
@@ -61,22 +53,24 @@ public class KittensClientHelper(Socket socket)
             ? Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{comboType}:{indicesStr}:{targetData}")
             : Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{comboType}:{indicesStr}");
 
-        Console.WriteLine($"DEBUG SendUseCombo: {gameId}:{playerId}:{comboType}:{indicesStr}:{targetData}");
-
         var package = new KittensPackageBuilder(payload, Command.UseCombo);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
-    public Task SendPlayNope(Guid gameId, Guid playerId, Guid actionId)
+    public Task SendPlayNope(Guid gameId, Guid playerId, Guid? actionId = null)
     {
-        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{actionId}");
+        // Если actionId не указан, отправляем только gameId:playerId
+        var payload = actionId.HasValue && actionId.Value != Guid.Empty
+            ? Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{actionId.Value}")
+            : Encoding.UTF8.GetBytes($"{gameId}:{playerId}");
+
         var package = new KittensPackageBuilder(payload, Command.PlayNope);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
-    public Task SendPlayDefuse(Guid gameId, Guid playerId, int position)
+    public Task SendPlayDefuse(Guid gameId, Guid playerId)
     {
-        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{position}");
+        var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}");
         var package = new KittensPackageBuilder(payload, Command.PlayDefuse);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
@@ -105,22 +99,19 @@ public class KittensClientHelper(Socket socket)
     public Task SendChooseCard(Guid gameId, Guid playerId, int cardIndex)
     {
         var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
-        var package = new KittensPackageBuilder(payload, Command.TargetPlayer); // Используем TargetPlayer
+        var package = new KittensPackageBuilder(payload, Command.TargetPlayer);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
     public Task SendFavorResponse(Guid gameId, Guid playerId, int cardIndex)
     {
         var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
-        Console.WriteLine($"DEBUG Client: Отправляем FavorResponse: {gameId}:{playerId}:{cardIndex}");
         var package = new KittensPackageBuilder(payload, Command.PlayFavor);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 
     public Task SendStealCard(Guid gameId, Guid playerId, int cardIndex)
     {
-        // Отправляем только ID игры, ID игрока и номер карты
-        // Сервер сам найдет цель из PendingStealAction
         var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
         var package = new KittensPackageBuilder(payload, Command.StealCard);
         return socket.SendAsync(package.Build(), SocketFlags.None);
@@ -130,6 +121,11 @@ public class KittensClientHelper(Socket socket)
     {
         var payload = Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{cardIndex}");
         var package = new KittensPackageBuilder(payload, Command.TakeFromDiscard);
+        return socket.SendAsync(package.Build(), SocketFlags.None);
+    }
+    public Task SendGetAvailableGames()
+    {
+        var package = new KittensPackageBuilder(Array.Empty<byte>(), Command.GetAvailableGames);
         return socket.SendAsync(package.Build(), SocketFlags.None);
     }
 }

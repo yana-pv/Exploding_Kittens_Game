@@ -1,5 +1,5 @@
-﻿using Server.Game.Enums;
-using Server.Game.Models;
+﻿using Server.Game.Models;
+using Shared.Models;
 using System.Collections.Concurrent;
 
 namespace Server.Infrastructure;
@@ -52,5 +52,19 @@ public class GameSessionManager
         {
             _sessions.TryRemove(session.Id, out _);
         }
+    }
+
+    public IEnumerable<GameSession> GetWaitingGames()
+    {
+        return _sessions.Values
+            .Where(s => s.State == GameState.WaitingForPlayers &&
+                       s.Players.Count < s.MaxPlayers &&
+                       DateTime.UtcNow - s.CreatedAt < TimeSpan.FromHours(1))
+            .OrderByDescending(s => s.CreatedAt);
+    }
+
+    public int GetWaitingGamesCount()
+    {
+        return GetWaitingGames().Count();
     }
 }

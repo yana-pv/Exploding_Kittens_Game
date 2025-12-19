@@ -1,4 +1,4 @@
-﻿using Server.Networking.Commands;
+﻿using Shared.Models;
 
 namespace Client.ClientHandlers;
 

@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Server.Networking.Commands;
+using Shared.Models;
 
 namespace Client.ClientHandlers;
 

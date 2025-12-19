@@ -1,6 +1,6 @@
-﻿using Server.Game.Enums;
-using Server.Game.Models;
+﻿using Server.Game.Models;
 using Server.Networking;
+using Shared.Models;
 
 namespace Server.Game.Services;
 

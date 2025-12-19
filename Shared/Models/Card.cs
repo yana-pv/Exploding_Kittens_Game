@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Server.Game.Models;
+namespace Shared.Models;
 
 public class Card
 {

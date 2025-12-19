@@ -1,6 +1,6 @@
-﻿using Server.Game.Enums;
-using Server.Game.Models;
+﻿using Server.Game.Models;
 using Server.Infrastructure;
+using Shared.Models;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;

@@ -1,10 +1,8 @@
-﻿using Server.Game.Enums;
-using Server.Game.Models;
-using Server.Networking.Commands;
+﻿using Shared.Models;
 using System.Text;
 using System.Text.Json;
 
-namespace Server.Networking.Protocol;
+namespace Shared.Protocol;
 
 public class KittensPackageBuilder
 {

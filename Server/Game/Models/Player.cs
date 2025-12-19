@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using Shared.Models;
+using System.Net.Sockets;
 using System.Text.Json.Serialization;
 
 namespace Server.Game.Models;
@@ -22,9 +23,6 @@ public class Player
     public void AddToHand(Card card)
     {
         Hand.Add(card);
-
-        // Сортируем по типу для порядка
-        Hand.Sort((a, b) => a.Type.CompareTo(b.Type));
     }
 
     public Card RemoveCard(CardType type)

@@ -1,5 +1,5 @@
-﻿using Server.Game.Enums;
-using Server.Infrastructure;
+﻿using Server.Infrastructure;
+using Shared.Models;
 using System.Net.Sockets;
 using System.Text;
 

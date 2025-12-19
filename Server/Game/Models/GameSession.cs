@@ -1,6 +1,6 @@
-﻿using Server.Game.Enums;
-using Server.Game.Services;
-using Server.Networking.Protocol;
+﻿using Server.Game.Services;
+using Shared.Models;
+using Shared.Protocol;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -156,6 +156,15 @@ public class GameSession
         TurnsPlayed++;
     }
 
+    public async Task BroadcastToOthers(Player excludedPlayer, string message)
+    {
+        var messageData = KittensPackageBuilder.MessageResponse(message);
+        foreach (var player in Players.Where(p => p.IsAlive && p != excludedPlayer && p.Connection != null))
+        {
+            await player.Connection.SendAsync(messageData, SocketFlags.None);
+        }
+    }
+
     public void EliminatePlayer(Player player)
     {
         player.IsAlive = false;
@@ -265,15 +274,6 @@ public class GameSession
         };
 
         return JsonSerializer.Serialize(state);
-    }
-
-    private void Log(string message)
-    {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        GameLog.Add($"[{timestamp}] {message}");
-
-        if (GameLog.Count > 100)
-            GameLog.RemoveAt(0);
     }
 
 

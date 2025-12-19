@@ -1,4 +1,4 @@
-﻿using Server.Game.Enums;
+﻿using Shared.Models;
 
 namespace Server.Game.Models;
 

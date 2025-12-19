@@ -1,11 +1,10 @@
-﻿using Server.Game.Enums;
-using Server.Game.Models;
+﻿using Server.Game.Models;
 using Server.Networking.Commands;
-using Server.Networking.Protocol;
+using Shared.Models;
+using Shared.Protocol;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
 namespace Server.Infrastructure;
 
@@ -117,11 +116,9 @@ public class EKServer
     {
         var welcomeMessage = "Добро пожаловать в Взрывные Котята!\n" +
                             "Доступные команды:\n" +
-                            "- create [имя] - создать новую игру\n" +
-                            "- join [ID_игры] [имя] - присоединиться к игре\n" +
-                            "- start [ID_игры] - начать игру\n" +
-                            "- play [ID_игры] [номер_карты] - сыграть карту\n" +
-                            "- draw [ID_игры] - взять карту из колоды\n";
+                            "- create  - создать новую игру\n" +
+                            "- join [ID_игры]  - присоединиться к игре\n" +
+                            "- start  - начать игру\n";
 
         await clientSocket.SendAsync(KittensPackageBuilder.MessageResponse(welcomeMessage),
             SocketFlags.None);

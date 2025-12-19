@@ -1,4 +1,4 @@
-﻿namespace Server.Networking.Commands;
+﻿namespace Shared.Models;
 
 public enum Command : byte
 {
@@ -25,6 +25,9 @@ public enum Command : byte
     GetGameState = 0x30,
     GetPlayerHand = 0x31,
     GetPlayers = 0x32,
+    GetAvailableGames = 0x33,
+    GameList = 0x34,         
+
 
     // Ответы сервера
     GameCreated = 0x40,

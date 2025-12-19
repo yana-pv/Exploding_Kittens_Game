@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using Shared.Models;
+using System.Text.Json.Serialization;
 
 namespace Server.Game.Models;
 

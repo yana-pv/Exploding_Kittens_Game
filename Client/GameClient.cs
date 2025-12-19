@@ -1,8 +1,7 @@
 ﻿using Client.ClientHandlers;
-using Server.Game.Enums;
-using Server.Game.Models;
-using Server.Networking.Commands;
-using Server.Networking.Protocol;
+using Client.Models;
+using Shared.Models;
+using Shared.Protocol;
 using System.Net.Sockets;
 using System.Text;
 
@@ -16,7 +15,6 @@ public class GameClient
 
     public Guid? _lastActiveActionId = null;
 
-
     public Guid? SessionId { get; set; }
     public Guid PlayerId { get; set; }
     public List<Card> Hand { get; } = new();
@@ -24,12 +22,19 @@ public class GameClient
     public bool Running { get; set; } = true;
     public string PlayerName { get; set; } = "Игрок";
     public List<string> GameLog { get; } = new();
-    public List<PlayerInfo> OtherPlayers { get; } = new();
+    public List<PlayerInfoDto> OtherPlayers { get; } = new();
     private readonly List<byte> _receiveBuffer = new();
-
 
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
+
+    // Переменные для управления отображением
+    private DateTime _lastDisplayTime = DateTime.MinValue;
+    private const int DISPLAY_COOLDOWN_MS = 100;
+    private bool _handDisplayed = false;
+    private string _lastGameState = "";
+    private int _consoleWidth = Console.WindowWidth;
+    private int _consoleHeight = Console.WindowHeight;
 
     public GameClient(string host, int port)
     {
@@ -38,14 +43,66 @@ public class GameClient
         _helper = new KittensClientHelper(_socket);
         _handlerFactory = new ClientCommandHandlerFactory();
 
-        Console.WriteLine($"Подключено к серверу {host}:{port}");
+        SetupConsole();
+        PrintWelcomeMessage(host, port);
+    }
+
+    private void SetupConsole()
+    {
+        Console.Title = "🎮 Взрывные Котята";
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
+        Console.CursorVisible = true;
+
+        try
+        {
+            _consoleWidth = Math.Max(80, Console.WindowWidth);
+            _consoleHeight = Math.Max(25, Console.WindowHeight);
+        }
+        catch
+        {
+            _consoleWidth = 80;
+            _consoleHeight = 25;
+        }
+    }
+
+    private void PrintWelcomeMessage(string host, int port)
+    {
+        Console.Clear();
+        PrintHeader();
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"✅ Подключено к серверу {host}:{port}");
+        Console.ResetColor();
+        Console.WriteLine();
+    }
+
+    private void PrintHeader()
+    {
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                  🐱 ВЗРЫВНЫЕ КОТЯТА 🐱                      ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+        Console.WriteLine();
     }
 
     public async Task Start()
     {
         // Запрашиваем имя игрока
-        Console.Write("Введите ваше имя: ");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write("🎭 Введите ваше имя: ");
+        Console.ResetColor();
+
         PlayerName = Console.ReadLine()?.Trim() ?? "Игрок";
+        Console.WriteLine();
+
+        // Автоматически запрашиваем список игр при подключении
+        PrintInfo("🔍 Ищу доступные игры...");
+        await _helper.SendGetAvailableGames();
+
+        // Ждем немного для получения ответа
+        await Task.Delay(500);
 
         // Запускаем поток прослушивания
         _listenerTask = Task.Run(ListenForServerMessages, _cts.Token);
@@ -68,7 +125,7 @@ public class GameClient
                 }
                 else
                 {
-                    Console.WriteLine("Соединение с сервером потеряно.");
+                    PrintError("Соединение с сервером потеряно.");
                     Running = false;
                 }
 
@@ -80,33 +137,131 @@ public class GameClient
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка: {ex.Message}");
+                PrintError($"Ошибка: {ex.Message}");
             }
         }
 
         await Stop();
     }
 
+    // В Client/GameClient.cs
+    public void DisplayAvailableGames(List<GameInfo> games)
+    {
+        Console.Clear();
+        PrintHeader();
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                🎮 ДОСТУПНЫЕ ИГРЫ 🎮                     ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
+        Console.WriteLine();
+
+        // Фильтруем только игры, которые ожидают игроков
+        var waitingGames = games
+            .Where(g => g.State == GameState.WaitingForPlayers)
+            .ToList();
+
+        if (waitingGames.Count == 0)
+        {
+            Console.WriteLine("   📭 Нет игр, ожидающих игроков.");
+            Console.WriteLine("   💡 Создайте новую игру командой 'create [имя]'");
+            Console.WriteLine();
+
+            // Показываем другие игры для информации
+            var otherGames = games
+                .Where(g => g.State != GameState.WaitingForPlayers)
+                .ToList();
+
+            if (otherGames.Count > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine("   Другие игры (в процессе):");
+                foreach (var game in otherGames)
+                {
+                    Console.WriteLine($"   • {game.CreatorName} - {game.StateDescription}");
+                }
+                Console.ResetColor();
+            }
+
+            return;
+        }
+
+        Console.WriteLine($"   Найдено игр: {waitingGames.Count}");
+        Console.WriteLine();
+
+        for (int i = 0; i < waitingGames.Count; i++)
+        {
+            var game = waitingGames[i];
+
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.Write($"   [{i + 1}] ");
+            Console.ResetColor();
+
+            Console.Write($"Создатель: ");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.Write($"{game.CreatorName,-10}");
+            Console.ResetColor();
+
+            Console.Write($" | Игроков: ");
+            Console.ForegroundColor = game.PlayersCount < game.MaxPlayers ? ConsoleColor.Green : ConsoleColor.Red;
+            Console.Write($"{game.PlayersCount}/{game.MaxPlayers}");
+            Console.ResetColor();
+
+            Console.Write($" | Статус: ");
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.Write($"{game.StateDescription}");
+            Console.ResetColor();
+
+            Console.Write($" | ID: ");
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine(game.Id.ToString()[..8] + "..."); // Показываем только первые 8 символов
+            Console.ResetColor();
+
+            Console.Write($"        Создана: ");
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+
+            if (game.TimeSinceCreation.TotalMinutes < 1)
+                Console.Write("только что");
+            else if (game.TimeSinceCreation.TotalHours < 1)
+                Console.Write($"{(int)game.TimeSinceCreation.TotalMinutes} мин назад");
+            else
+                Console.Write($"{(int)game.TimeSinceCreation.TotalHours} ч назад");
+
+            Console.WriteLine($" | Полный ID: {game.Id}");
+            Console.ResetColor();
+            Console.WriteLine();
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("   💡 КАК ПРИСОЕДИНИТЬСЯ:");
+        Console.ResetColor();
+        Console.WriteLine("      1. Выберите номер игры (1, 2, 3...)");
+        Console.WriteLine($"      2. Скопируйте ID игры (выделите и Ctrl+C)");
+        Console.WriteLine($"      3. Введите команду: join [ID] {PlayerName}");
+        Console.WriteLine();
+        Console.WriteLine($"   💡 Пример для игры #1:");
+        Console.WriteLine($"      join {waitingGames[0].Id} {PlayerName}");
+        Console.WriteLine();
+        Console.WriteLine("   💡 Или создайте новую игру: create [ваше_имя]");
+        Console.ResetColor();
+        Console.WriteLine();
+    }
+
     private async Task HandleUserInput()
     {
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.Write("\n> ");
+        Console.Write("\n🎮 > ");
         Console.ResetColor();
 
-        // Используйте ReadLineSafe вместо Console.ReadLine()
         var input = ReadLineSafe();
         if (string.IsNullOrEmpty(input)) return;
 
         var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return;
+
         var command = parts[0].ToLower();
-
-
-        Console.WriteLine($"Ввод: '{input}'");
-        Console.WriteLine($"Разделено на {parts.Length} частей:");
-        for (int i = 0; i < parts.Length; i++)
-        {
-            Console.WriteLine($"  parts[{i}] = '{parts[i]}'");
-        }
 
         try
         {
@@ -114,6 +269,12 @@ public class GameClient
             {
                 case "create":
                     await HandleCreateCommand(parts);
+                    break;
+
+                case "games":
+                case "list":
+                    await _helper.SendGetAvailableGames();
+                    PrintInfo("🔍 Обновляю список игр...");
                     break;
 
                 case "join":
@@ -165,20 +326,11 @@ public class GameClient
                     await HandleFavorCommand(parts);
                     break;
 
-                case "give": // Альтернативная команда для favor
+                case "give":
                     await HandleGiveCommand(parts);
                     break;
 
-                case "choose": // Альтернативное название для give
-                    await HandleGiveCommand(parts); // или HandleChooseCommand если он существует
-                    break;
-
-                case "exit":
-                case "quit":
-                    Running = false;
-                    break;
-
-                case "steal": // ← ДОБАВЬТЕ ЭТУ СТРОЧКУ!
+                case "steal":
                     await HandleStealCommand(parts);
                     break;
 
@@ -190,14 +342,25 @@ public class GameClient
                     await HandleEndTurnCommand(parts);
                     break;
 
+                case "clear":
+                    Console.Clear();
+                    PrintHeader();
+                    break;
+
+                case "exit":
+                case "quit":
+                    Running = false;
+                    break;
+
                 default:
-                    Console.WriteLine($"Неизвестная команда: {command}");
+                    PrintError($"Неизвестная команда: {command}");
+                    Console.WriteLine("💡 Введите 'help' для списка команд");
                     break;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка выполнения команды: {ex.Message}");
+            PrintError($"Ошибка выполнения команды: {ex.Message}");
         }
     }
 
@@ -206,9 +369,11 @@ public class GameClient
         var name = PlayerName;
         if (string.IsNullOrEmpty(name))
         {
-            Console.WriteLine("Имя игрока не может быть пустым!");
+            PrintError("Имя игрока не может быть пустым!");
             return;
         }
+
+        PrintInfo($"Создаю игру как {name}...");
         await _helper.SendCreateGame(name);
     }
 
@@ -216,103 +381,171 @@ public class GameClient
     {
         if (parts.Length < 2)
         {
-            Console.WriteLine("Использование: join [ID_игры] [имя]");
+            Console.WriteLine("📝 Использование: join [ID_игры] [имя]");
+            Console.WriteLine("💡 Пример: join 550e8400-e29b-41d4-a716-446655440000 Иван");
             return;
         }
 
         if (!Guid.TryParse(parts[1], out var gameId))
         {
-            Console.WriteLine("Неверный формат ID игры");
+            PrintError("Неверный формат ID игры");
             return;
         }
 
         var name = parts.Length > 2 ? parts[2] : PlayerName;
+
+        PrintInfo($"Присоединяюсь к игре {gameId} как {name}...");
         await _helper.SendJoinGame(gameId, name);
-        Console.WriteLine($"Присоединение к игре {gameId} как {name}...");
     }
 
     private async Task HandleStartCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре. Сначала создайте или присоединитесь к игре.");
+            PrintError("Вы не в игре. Сначала создайте или присоединитесь к игре.");
             return;
         }
 
+        PrintInfo("Запуск игры...");
         await _helper.SendStartGame(SessionId.Value);
-        Console.WriteLine("Запуск игры...");
     }
 
     private async Task HandlePlayCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
         if (parts.Length < 2 || !int.TryParse(parts[1], out var cardIndex))
         {
-            Console.WriteLine("Использование: play [номер_карты] [ID_целевого_игрока]");
-            Console.WriteLine("Пример: play 3 550e8400-e29b-41d4-a716-446655440000");
-            DisplayHand();
+            Console.WriteLine("📝 Использование: play [номер_карты]");
+            Console.WriteLine("💡 Для карты 'Одолжение' просто введите номер карты, затем выберите игрока");
+            DisplayHand(); // Показываем руку при неверном вводе
             return;
         }
 
         if (cardIndex < 0 || cardIndex >= Hand.Count)
         {
-            Console.WriteLine($"Неверный номер карты. Доступны номера 0-{Hand.Count - 1}");
+            PrintError($"Неверный номер карты. Доступны номера 0-{Hand.Count - 1}");
+            DisplayHand(); // Показываем руку при неверном вводе
             return;
         }
 
         var card = Hand[cardIndex];
-        string? targetPlayerId = parts.Length > 2 ? parts[2] : null;
 
-        // Проверим, что targetPlayerId - это Guid
-        if (targetPlayerId != null && !Guid.TryParse(targetPlayerId, out _))
+        // Особый случай: карта "Одолжение" (Favor)
+        if (card.Type == CardType.Favor)
         {
-            Console.WriteLine("ID целевого игрока должен быть в формате GUID!");
-            Console.WriteLine("Пример: 550e8400-e29b-41d4-a716-446655440000");
+            await HandleFavorCard(cardIndex);
             return;
         }
 
+        string? targetPlayerId = parts.Length > 2 ? parts[2] : null;
+
+        if (targetPlayerId != null && !Guid.TryParse(targetPlayerId, out _))
+        {
+            PrintError("ID целевого игрока должен быть в формате GUID!");
+            Console.WriteLine("💡 Пример: 550e8400-e29b-41d4-a716-446655440000");
+            DisplayHand(); // Показываем руку при ошибке
+            return;
+        }
+
+        PrintInfo($"Играю карту: {card.Name}");
         await _helper.SendPlayCard(SessionId.Value, PlayerId, cardIndex, targetPlayerId);
-        Console.WriteLine($"Играем карту: {card.Name}");
+
+        // Ждем немного для получения ответа от сервера
+        await Task.Delay(300);
+
+        // ПОКАЗЫВАЕМ РУКУ ПОСЛЕ ИГРЫ КАРТЫ
+        DisplayHand();
+    }
+
+    private async Task HandleFavorCard(int cardIndex)
+    {
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                     🎭 ОДОЛЖЕНИЕ 🎭                      ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
+        // Показываем список игроков для выбора
+        var selectedPlayer = await SelectPlayerFromList("🎯 Выберите игрока, у которого хотите попросить карту:");
+        if (selectedPlayer == null) return;
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"\n✅ Вы выбрали: {selectedPlayer.Name}");
+        Console.WriteLine($"📤 Играем 'Одолжение' на игрока {selectedPlayer.Name}");
+        Console.ResetColor();
+
+        // Подтверждение
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.Write("\n💡 Подтвердите действие (Enter - да, n - нет): ");
+        Console.ResetColor();
+
+        var confirmation = ReadLineSafe();
+        if (!string.IsNullOrEmpty(confirmation) && confirmation.ToLower() == "n")
+        {
+            PrintInfo("❌ Действие отменено.");
+            return;
+        }
+
+        // Ждем немного для лучшего UX
+        await Task.Delay(500);
+
+        // Отправляем команду на сервер
+        PrintInfo($"Играю карту 'Одолжение' на {selectedPlayer.Name}");
+        await _helper.SendPlayCard(SessionId.Value, PlayerId, cardIndex, selectedPlayer.Id.ToString());
+
+        // Ждем немного для получения ответа от сервера
+        await Task.Delay(300);
+
+        // ПОКАЗЫВАЕМ РУКУ ПОСЛЕ ОДОЛЖЕНИЯ
+        DisplayHand();
     }
 
     private async Task HandleDrawCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
+        PrintInfo("Беру карту из колоды...");
         await _helper.SendDrawCard(SessionId.Value, PlayerId);
-        Console.WriteLine("Берем карту из колоды...");
+
+        // Ждем немного для получения ответа от сервера
+        await Task.Delay(300);
+
+        // ПОКАЗЫВАЕМ РУКУ ПОСЛЕ ВЗЯТИЯ КАРТЫ
+        DisplayHand();
     }
+
 
     private async Task HandleComboCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
         if (parts.Length < 3)
         {
-            Console.WriteLine("❌ Использование: combo [тип] [номера_карт через запятую]");
+            Console.WriteLine("📝 Использование: combo [тип] [номера_карт через запятую]");
             Console.WriteLine("💡 Примеры:");
             Console.WriteLine("  combo 2 0,1");
             Console.WriteLine("  combo 3 0,1,2");
             Console.WriteLine("  combo 5 0,1,2,3,4");
+            DisplayHand(); // Показываем руку при неверном вводе
             return;
         }
 
         if (!int.TryParse(parts[1], out var comboType) || (comboType != 2 && comboType != 3 && comboType != 5))
         {
-            Console.WriteLine("❌ Неверный тип комбо. Допустимо: 2, 3, 5");
+            PrintError("❌ Неверный тип комбо. Допустимо: 2, 3, 5");
             return;
         }
 
@@ -327,7 +560,7 @@ public class GameClient
 
         if (cardIndices.Count != comboType)
         {
-            Console.WriteLine($"❌ Для комбо типа {comboType} нужно {comboType} разных карт");
+            PrintError($"❌ Для комбо типа {comboType} нужно {comboType} разных карт");
             Console.WriteLine($"   Указано: {cardIndices.Count} карт");
             return;
         }
@@ -336,55 +569,75 @@ public class GameClient
         var comboCards = cardIndices.Select(i => Hand[i]).ToList();
         if (!ValidateComboCards(comboType, comboCards))
         {
-            Console.WriteLine($"❌ Выбранные карты не подходят для комбо {comboType}");
+            PrintError($"❌ Выбранные карты не подходят для комбо {comboType}");
             DisplayComboRules(comboType);
             return;
         }
 
         var cardNames = comboCards.Select(c => c.Name);
-        Console.WriteLine($"🎭 Играем комбо {comboType} с картами: {string.Join(", ", cardNames)}");
+        PrintInfo($"🎭 Играю комбо {comboType} с картами: {string.Join(", ", cardNames)}");
 
         string? targetData = null;
 
         switch (comboType)
         {
             case 2:
-                // Для комбо 2 нужен только ID цели
+                // Для комбо 2 нужен ID цели
                 if (parts.Length > 3)
                 {
                     targetData = parts[3];
                 }
                 else
                 {
-                    // Запрашиваем ID цели
-                    await DisplayOtherPlayers();
-                    Console.Write("\nВведите ID целевого игрока: ");
-                    var targetId = ReadLineSafe();
+                    // Показываем список игроков для выбора
+                    var selectedTarget = await SelectPlayerFromList("🎯 Выберите цель для Слепого Карманника:");
+                    if (selectedTarget == null) return;
 
-                    if (string.IsNullOrEmpty(targetId) || !Guid.TryParse(targetId, out _))
-                    {
-                        Console.WriteLine("❌ Неверный ID игрока!");
-                        return;
-                    }
-                    targetData = targetId;
+                    targetData = selectedTarget.Id.ToString();
                 }
-                Console.WriteLine($"✅ Цель для комбо 2: {targetData}");
                 break;
 
             case 3:
                 // Для комбо 3 нужен ID цели и название карты
-                if (parts.Length > 3)
+                if (parts.Length > 4) // combo 3 0,1,2 [номер_игрока] [название_карты]
                 {
-                    targetData = parts[3];
-                    if (parts.Length > 4)
+                    var playerNumber = parts[3];
+                    var cardName = parts[4];
+
+                    // Если указан номер игрока, а не ID
+                    if (int.TryParse(playerNumber, out var playerIndex))
                     {
-                        targetData += $"|{parts[4]}";
+                        var alivePlayers = OtherPlayers
+                            .Where(p => p.IsAlive && p.Id != PlayerId)
+                            .OrderBy(p => p.Name)
+                            .ToList();
+
+                        if (playerIndex > 0 && playerIndex <= alivePlayers.Count)
+                        {
+                            targetData = $"{alivePlayers[playerIndex - 1].Id}|{cardName}";
+                        }
+                        else
+                        {
+                            PrintError($"❌ Неверный номер игрока! Доступно: 1-{alivePlayers.Count}");
+                            return;
+                        }
                     }
+                    else
+                    {
+                        targetData = $"{playerNumber}|{cardName}";
+                    }
+                }
+                else if (parts.Length > 3 && Guid.TryParse(parts[3], out _))
+                {
+                    // Если указан GUID цели и нет названия карты
+                    PrintError("❌ Для комбо 3 укажите также название карты!");
+                    Console.WriteLine("💡 Пример: combo 3 0,1,2 [номер_игрока] [название_карты]");
+                    return;
                 }
                 else
                 {
-                    Console.WriteLine("❌ Для комбо 3 укажите ID цели и название карты");
-                    Console.WriteLine("💡 Пример: combo 3 0,1,2 [ID_цели] [название_карты]");
+                    // Показываем меню выбора игрока и карты
+                    await HandleCombo3WithMenu(cardIndices);
                     return;
                 }
                 break;
@@ -396,150 +649,128 @@ public class GameClient
 
         try
         {
-            Console.WriteLine($"📤 Отправка комбо на сервер...");
-
             // Отправляем индексы карт
             var indicesStr = string.Join(",", cardIndices);
-            Console.WriteLine($"DEBUG: Отправляемые индексы карт: {indicesStr}");
 
             // Используем существующий метод SendUseCombo
             await _helper.SendUseCombo(SessionId.Value, PlayerId, comboType, cardIndices, targetData);
 
-            Console.WriteLine($"✅ Команда комбо отправлена!");
+            PrintInfo($"✅ Команда комбо отправлена!");
+
+            // Ждем немного для получения ответа от сервера
+            await Task.Delay(500);
+
+            // ПОКАЗЫВАЕМ РУКУ ПОСЛЕ КОМБО
+            DisplayHand();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"❌ Ошибка отправки комбо: {ex.Message}");
+            PrintError($"❌ Ошибка отправки комбо: {ex.Message}");
+            DisplayHand(); // Показываем руку при ошибке
         }
     }
 
-
-    // Новый метод: Получение цели для комбо 2
-    private async Task<string?> GetTargetForCombo2()
+    private async Task<PlayerInfoDto?> SelectPlayerFromList(string title)
     {
-        Console.WriteLine("\n══════════════════════════════════════════");
-        Console.WriteLine("🎭 КОМБО 2: СЛЕПОЙ КАРМАННИК");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"\n{title}");
         Console.WriteLine("══════════════════════════════════════════");
+        Console.ResetColor();
 
-        await DisplayOtherPlayers();
-
-        // Если нет других игроков, нельзя играть комбо 2
+        // Получаем список живых игроков (кроме себя)
         var alivePlayers = OtherPlayers
             .Where(p => p.IsAlive && p.Id != PlayerId)
+            .OrderBy(p => p.Name)
             .ToList();
 
         if (alivePlayers.Count == 0)
         {
-            Console.WriteLine("❌ Нет других живых игроков для использования комбо!");
+            PrintError("❌ Нет других живых игроков!");
             return null;
         }
 
-        Console.Write("\nВведите ID целевого игрока: ");
-        var targetId = ReadLineSafe();
-
-        if (string.IsNullOrEmpty(targetId))
+        // Показываем список с номерами
+        for (int i = 0; i < alivePlayers.Count; i++)
         {
-            Console.WriteLine("❌ ID игрока не может быть пустым");
-            return null;
+            var player = alivePlayers[i];
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.Write($"  [{i + 1}] ");
+            Console.ResetColor();
+            Console.Write($"{player.Name,-15}");
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"  Карт: {player.CardCount}");
+            Console.ResetColor();
         }
 
-        if (!Guid.TryParse(targetId, out var parsedGuid))
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write($"🎯 Выберите номер игрока (1-{alivePlayers.Count}): ");
+        Console.ResetColor();
+
+        var choiceInput = ReadLineSafe();
+        if (string.IsNullOrEmpty(choiceInput) || !int.TryParse(choiceInput, out var choice))
         {
-            Console.WriteLine("❌ ID должен быть в формате GUID");
-            Console.WriteLine("💡 Пример: 550e8400-e29b-41d4-a716-446655440000");
+            PrintError("❌ Неверный выбор!");
             return null;
         }
 
-        // Проверяем, что ID принадлежит живому игроку (кроме себя)
-        var targetPlayer = OtherPlayers.FirstOrDefault(p =>
-            p.Id == parsedGuid && p.IsAlive && p.Id != PlayerId);
-
-        if (targetPlayer == null)
+        if (choice < 1 || choice > alivePlayers.Count)
         {
-            Console.WriteLine("❌ Указанный игрок не найден, не жив или это вы сами!");
+            PrintError($"❌ Неверный номер! Выберите от 1 до {alivePlayers.Count}");
             return null;
         }
 
-        Console.WriteLine($"✅ Цель найдена: {targetPlayer.Name}");
-        Console.WriteLine($"🎯 Крадем СЛУЧАЙНУЮ карту у {targetPlayer.Name} ({targetId})");
+        var selectedPlayer = alivePlayers[choice - 1];
 
-        return targetId;
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"\n✅ Вы выбрали: {selectedPlayer.Name}");
+        Console.ResetColor();
+
+        return selectedPlayer;
     }
 
-    // Новый метод: Получение цели для комбо 3
-    private async Task<string?> GetTargetForCombo3()
+    private async Task HandleCombo3WithMenu(List<int> cardIndices)
     {
-        Console.WriteLine("\n══════════════════════════════════════════");
-        Console.WriteLine("🎣 КОМБО 3: ВРЕМЯ РЫБАЧИТЬ");
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                     🎣 КОМБО 3: ВРЕМЯ РЫБАЧИТЬ 🎣           ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
+        // 1. Выбор игрока
+        var selectedPlayer = await SelectPlayerFromList("🎯 Выберите игрока, у которого хотите взять карту:");
+        if (selectedPlayer == null) return;
+
+        // 2. Выбор карты
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n📋 ВЫБЕРИТЕ КАРТУ:");
+        Console.WriteLine("══════════════════════════════════════════");
+        Console.ResetColor();
+
+        Console.WriteLine("  1. Взрывной Котенок");
+        Console.WriteLine("  2. Обезвредить");
+        Console.WriteLine("  3. Нет");
+        Console.WriteLine("  4. Атаковать");
+        Console.WriteLine("  5. Пропустить");
+        Console.WriteLine("  6. Одолжение");
+        Console.WriteLine("  7. Перемешать");
+        Console.WriteLine("  8. Заглянуть в будущее");
+        Console.WriteLine("  9. Радужный Кот");
+        Console.WriteLine(" 10. Котобородач");
+        Console.WriteLine(" 11. Кошка-Картошка");
+        Console.WriteLine(" 12. Арбузный Котэ");
+        Console.WriteLine(" 13. Такокот");
         Console.WriteLine("══════════════════════════════════════════");
 
-        // Вызываем метод, который мы только что создали
-        await DisplayOtherPlayers();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write("\n🎯 Выберите номер карты (1-13): ");
+        Console.ResetColor();
 
-        // Если нет других игроков, нельзя играть комбо 3
-        var alivePlayers = OtherPlayers
-            .Where(p => p.IsAlive && p.Id != PlayerId)
-            .ToList();
-
-        if (alivePlayers.Count == 0)
-        {
-            Console.WriteLine("❌ Нет других живых игроков для использования комбо!");
-            return null;
-        }
-
-        Console.Write("\nВведите ID целевого игрока: ");
-        var targetId = ReadLineSafe();
-
-        if (string.IsNullOrEmpty(targetId))
-        {
-            Console.WriteLine("❌ ID игрока не может быть пустым");
-            return null;
-        }
-
-        if (!Guid.TryParse(targetId, out var parsedGuid))
-        {
-            Console.WriteLine("❌ ID должен быть в формате GUID");
-            Console.WriteLine("💡 Пример: 550e8400-e29b-41d4-a716-446655440000");
-            return null;
-        }
-
-        // Проверяем, что ID принадлежит живому игроку (кроме себя)
-        var targetPlayer = OtherPlayers.FirstOrDefault(p =>
-            p.Id == parsedGuid && p.IsAlive && p.Id != PlayerId);
-
-        if (targetPlayer == null)
-        {
-            Console.WriteLine("❌ Указанный игрок не найден, не жив или это вы сами!");
-            return null;
-        }
-
-        Console.WriteLine($"✅ Цель найдена: {targetPlayer.Name}");
-
-        Console.WriteLine("\n══════════════════════════════════════════");
-        Console.WriteLine("📋 ВЫБЕРИТЕ КАРТУ ПО НОМЕРУ:");
-        Console.WriteLine("══════════════════════════════════════════");
-        Console.WriteLine(" 1. Взрывной Котенок");
-        Console.WriteLine(" 2. Обезвредить");
-        Console.WriteLine(" 3. Нет");
-        Console.WriteLine(" 4. Атаковать");
-        Console.WriteLine(" 5. Пропустить");
-        Console.WriteLine(" 6. Одолжение");
-        Console.WriteLine(" 7. Перемешать");
-        Console.WriteLine(" 8. Заглянуть в будущее");
-        Console.WriteLine(" 9. Радужный Кот");
-        Console.WriteLine("10. Котобородач");
-        Console.WriteLine("11. Кошка-Картошка");
-        Console.WriteLine("12. Арбузный Котэ");
-        Console.WriteLine("13. Такокот");
-        Console.WriteLine("══════════════════════════════════════════");
-
-        Console.Write("\nВведите номер карты (1-13): ");
         var cardNumberInput = ReadLineSafe();
-
         if (!int.TryParse(cardNumberInput, out var cardNumber) || cardNumber < 1 || cardNumber > 13)
         {
-            Console.WriteLine("❌ Неверный номер карты. Введите число от 1 до 13");
-            return null;
+            PrintError("❌ Неверный номер карты. Введите число от 1 до 13");
+            return;
         }
 
         // Сопоставляем номер с названием карты
@@ -558,127 +789,180 @@ public class GameClient
             11 => "Кошка-Картошка",
             12 => "Арбузный Котэ",
             13 => "Такокот",
-            _ => "Обезвредить" // fallback
+            _ => "Обезвредить"
         };
 
-        Console.WriteLine($"🎯 Запрашиваем карту '{cardName}' у игрока {targetPlayer.Name} ({targetId})");
-        Console.WriteLine($"DEBUG: Формируемая строка: '{targetId}|{cardName}'");
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"\n✅ Вы выбрали карту: {cardName}");
+        Console.WriteLine($"📤 Запрашиваем карту '{cardName}' у игрока {selectedPlayer.Name}");
+        Console.ResetColor();
 
-        return $"{targetId}|{cardName}";
-    }
+        // 3. Подтверждение
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.Write("\n💡 Подтвердите действие (Enter - да, n - нет): ");
+        Console.ResetColor();
 
-    // Новый метод: Проверка карт на соответствие комбо
-    private bool ValidateComboCards(int comboType, List<Card> cards)
-    {
-        if (cards.Count != comboType) return false;
-
-        switch (comboType)
+        var confirmation = ReadLineSafe();
+        if (!string.IsNullOrEmpty(confirmation) && confirmation.ToLower() == "n")
         {
-            case 2:
-                return cards[0].Type == cards[1].Type ||
-                       cards[0].IconId == cards[1].IconId;
-            case 3:
-                return (cards[0].Type == cards[1].Type && cards[1].Type == cards[2].Type) ||
-                       (cards[0].IconId == cards[1].IconId && cards[1].IconId == cards[2].IconId);
-            case 5:
-                return cards.Select(c => c.IconId).Distinct().Count() == 5;
-            default:
-                return false;
+            PrintInfo("❌ Действие отменено.");
+            return;
+        }
+
+        // 4. Отправка команды
+        var targetData = $"{selectedPlayer.Id}|{cardName}";
+        var indicesStr = string.Join(",", cardIndices);
+
+        try
+        {
+            await _helper.SendUseCombo(SessionId.Value, PlayerId, 3, cardIndices, targetData);
+            PrintInfo($"✅ Команда комбо 3 отправлена!");
+        }
+        catch (Exception ex)
+        {
+            PrintError($"❌ Ошибка отправки комбо: {ex.Message}");
         }
     }
 
-    private void DisplayComboRules(int comboType)
+    private async Task DisplayCardSelectionForCombo3(PlayerInfoDto targetPlayer)
     {
-        Console.WriteLine("\n📚 ПРАВИЛА КОМБО:");
-        switch (comboType)
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                     🎣 ВЫБОР КАРТЫ 🎣                       ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
+        Console.WriteLine($"🎯 Цель: {targetPlayer.Name}");
+        Console.WriteLine();
+
+        Console.WriteLine("📋 Выберите тип карты, которую хотите запросить:");
+        Console.WriteLine("══════════════════════════════════════════");
+        Console.WriteLine("  1. Взрывной Котенок");
+        Console.WriteLine("  2. Обезвредить");
+        Console.WriteLine("  3. Нет");
+        Console.WriteLine("  4. Атаковать");
+        Console.WriteLine("  5. Пропустить");
+        Console.WriteLine("  6. Одолжение");
+        Console.WriteLine("  7. Перемешать");
+        Console.WriteLine("  8. Заглянуть в будущее");
+        Console.WriteLine("  9. Радужный Кот");
+        Console.WriteLine(" 10. Котобородач");
+        Console.WriteLine(" 11. Кошка-Картошка");
+        Console.WriteLine(" 12. Арбузный Котэ");
+        Console.WriteLine(" 13. Такокот");
+        Console.WriteLine("══════════════════════════════════════════");
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.Write("\n🎯 Выберите номер карты (1-13): ");
+        Console.ResetColor();
+
+        var cardNumberInput = ReadLineSafe();
+        if (!int.TryParse(cardNumberInput, out var cardNumber) || cardNumber < 1 || cardNumber > 13)
         {
-            case 2:
-                Console.WriteLine("• 2 одинаковые карты ИЛИ");
-                Console.WriteLine("• 2 карты с одинаковой иконкой");
-                break;
-            case 3:
-                Console.WriteLine("• 3 одинаковые карты ИЛИ");
-                Console.WriteLine("• 3 карты с одинаковой иконкой");
-                break;
-            case 5:
-                Console.WriteLine("• 5 карт с РАЗНЫМИ иконками");
-                break;
+            PrintError("❌ Неверный номер карты. Введите число от 1 до 13");
+            return;
         }
+
+        // Сопоставляем номер с названием карты
+        string cardName = cardNumber switch
+        {
+            1 => "Взрывной Котенок",
+            2 => "Обезвредить",
+            3 => "Нет",
+            4 => "Атаковать",
+            5 => "Пропустить",
+            6 => "Одолжение",
+            7 => "Перемешать",
+            8 => "Заглянуть в будущее",
+            9 => "Радужный Кот",
+            10 => "Котобородач",
+            11 => "Кошка-Картошка",
+            12 => "Арбузный Котэ",
+            13 => "Такокот",
+            _ => "Обезвредить"
+        };
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"\n✅ Выбрана карта: {cardName}");
+        Console.WriteLine($"📤 Запрашиваем карту '{cardName}' у игрока {targetPlayer.Name}");
+        Console.ResetColor();
+
+        // Ждем немного для лучшего UX
+        await Task.Delay(500);
+
+        // Получаем текущие индексы карт из контекста (нужно будет сохранять их)
+        // Для простоты переделаем логику - пользователь должен ввести полную команду
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"\n💡 Введите полную команду:");
+        Console.WriteLine($"   combo 3 [номера_карт] {targetPlayer.Id} {cardName}");
+        Console.ResetColor();
     }
-
-
 
     private async Task HandleNopeCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
-        Guid actionId;
-
-        // Если команда просто "nope" без параметров
+        // НОВЫЙ ФОРМАТ: просто "nope" без параметров
         if (parts.Length == 1)
         {
-            if (_lastActiveActionId.HasValue)
+            PrintInfo("🚫 Играю карту НЕТ на последнее действие...");
+            await _helper.SendPlayNope(SessionId.Value, PlayerId, Guid.Empty); // Или можно не отправлять третий параметр
+        }
+        else
+        {
+            // Старый формат для обратной совместимости
+            if (Guid.TryParse(parts[1], out var actionId))
             {
-                Console.WriteLine($"💡 Использую последнее действие: {_lastActiveActionId}");
-                actionId = _lastActiveActionId.Value;
+                PrintInfo($"🚫 Играю НЕТ на действие {actionId}");
+                await _helper.SendPlayNope(SessionId.Value, PlayerId, actionId);
             }
             else
             {
-                Console.WriteLine("❌ Необходимо указать ID действия!");
-                Console.WriteLine("💡 ID действия можно увидеть в сообщении об атаке/комбо");
-                Console.WriteLine("📋 Формат: nope [ID_действия]");
-                return;
+                PrintError("Неверный формат команды!");
+                Console.WriteLine("💡 Используйте просто: nope");
             }
         }
-        else if (!Guid.TryParse(parts[1], out actionId))
-        {
-            Console.WriteLine("❌ Неверный формат ID действия!");
-            return;
-        }
-
-        Console.WriteLine($"🚫 Играю карту НЕТ на действие {actionId}");
-        await _helper.SendPlayNope(SessionId.Value, PlayerId, actionId);
     }
 
     private async Task HandleDefuseCommand(string[] parts)
     {
         if (!SessionId.HasValue || PlayerId == Guid.Empty)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
-        // Всегда используем текущие ID сессии и игрока
-        int position = 0;
-
-        if (parts.Length < 2)
+        // Проверяем, есть ли карта "Обезвредить" в руке
+        var hasDefuseCard = Hand.Any(c => c.Type == CardType.Defuse);
+        if (!hasDefuseCard)
         {
-            Console.WriteLine("❌ Использование: defuse [позиция]");
-            Console.WriteLine($"💡 Пример: defuse 0 (положить наверх)");
-            Console.WriteLine($"💡 Пример: defuse 4 (положить на 5-ю позицию)");
+            PrintError("❌ У вас нет карты 'Обезвредить' в руке!");
+            DisplayHand(); // Показываем руку при ошибке
             return;
         }
 
-        if (!int.TryParse(parts[1], out position))
+        // Команда: defuse (без параметров)
+        if (parts.Length == 1)
         {
-            Console.WriteLine("❌ Неверная позиция! Используйте число 0-5");
-            return;
+            PrintInfo("💣 Обезвреживаю котенка...");
+            await _helper.SendPlayDefuse(SessionId.Value, PlayerId);
+
+            // Ждем немного для получения ответа от сервера
+            await Task.Delay(300);
+
+            // ПОКАЗЫВАЕМ РУКУ ПОСЛЕ ОБЕЗВРЕЖИВАНИЯ
+            DisplayHand();
         }
-
-        // Ограничиваем позицию
-        position = Math.Min(position, 5);
-
-        Console.WriteLine($"💣 Отправка команды...");
-        Console.WriteLine($"   Game ID: {SessionId}");
-        Console.WriteLine($"   Player ID: {PlayerId}");
-        Console.WriteLine($"   Position: {position}");
-
-        await _helper.SendPlayDefuse(SessionId.Value, PlayerId, position);
-        Console.WriteLine($"✅ Команда отправлена!");
+        else
+        {
+            PrintError("❌ Неверная команда!");
+            Console.WriteLine("💡 Используйте просто: defuse");
+            DisplayHand(); // Показываем руку при ошибке
+        }
     }
 
     private async Task ListenForServerMessages()
@@ -692,7 +976,6 @@ public class GameClient
                 var bytesRead = await _socket.ReceiveAsync(buffer, SocketFlags.None, _cts.Token);
                 if (bytesRead == 0) break;
 
-                // Копируем данные в новый массив
                 var data = new byte[bytesRead];
                 Array.Copy(buffer, 0, data, 0, bytesRead);
 
@@ -705,29 +988,25 @@ public class GameClient
         }
         catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionReset)
         {
-            Console.WriteLine("\nСоединение с сервером разорвано.");
+            PrintError("Соединение с сервером разорвано.");
             Running = false;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"\nОшибка приема данных: {ex.Message}");
+            PrintError($"Ошибка приема данных: {ex.Message}");
             Running = false;
         }
     }
 
-    // File: Client/GameClient.cs
     private async Task ProcessServerMessage(byte[] data)
     {
-        Console.WriteLine($"Получено байт: {data.Length}, буфер: {_receiveBuffer.Count}");
-
+        // Добавляем данные в буфер без отладочного вывода
         _receiveBuffer.AddRange(data);
 
-        // Теперь минимальная длина пакета: START (1) + CMD (1) + LEN (2) + END (1) = 5 байт
         while (_receiveBuffer.Count >= 5)
         {
-            // Ищем стартовый байт 0x02
             int startIndex = -1;
-            for (int i = 0; i <= _receiveBuffer.Count - 5; i++) // -5 для минимального пакета
+            for (int i = 0; i <= _receiveBuffer.Count - 5; i++)
             {
                 if (_receiveBuffer[i] == 0x02)
                 {
@@ -738,59 +1017,36 @@ public class GameClient
 
             if (startIndex == -1)
             {
-                Console.WriteLine("Стартовый байт не найден");
                 _receiveBuffer.Clear();
                 break;
             }
 
             if (startIndex > 0)
             {
-                Console.WriteLine($"Пропускаем {startIndex} байт до стартового байта");
                 _receiveBuffer.RemoveRange(0, startIndex);
                 continue;
             }
 
-            // Теперь стартовый байт точно на позиции 0
             var command = _receiveBuffer[1];
-
-            // Читаем длину как ushort (2 байта, Little Endian)
             ushort payloadLength = (ushort)(_receiveBuffer[2] | (_receiveBuffer[3] << 8));
-
-            // Вычисляем ожидаемую общую длину: START + CMD + LEN_SIZE + PAYLOAD + END
             var expectedTotalLength = 1 + 1 + KittensPackageMeta.LengthSize + payloadLength + 1;
-
-            Console.WriteLine($"Пакет: команда 0x{command:X2}, длина (ushort) {payloadLength}, ожидаем {expectedTotalLength} байт, в буфере {_receiveBuffer.Count}");
 
             if (_receiveBuffer.Count >= expectedTotalLength)
             {
-                // Проверяем конечный байт на правильной позиции
-                var endIndex = expectedTotalLength - 1; // Последний байт пакета
-                if (endIndex >= _receiveBuffer.Count)
+                var endIndex = expectedTotalLength - 1;
+                if (endIndex >= _receiveBuffer.Count || _receiveBuffer[endIndex] != 0x03)
                 {
-                    Console.WriteLine("Недостаточно данных для проверки конечного байта");
-                    break; // или continue, если буфер неожиданно уменьшился
-                }
-
-                if (_receiveBuffer[endIndex] != 0x03)
-                {
-                    Console.WriteLine($"Неверный конечный байт: {_receiveBuffer[endIndex]:X2} на позиции {endIndex}, ожидаем 03 на позиции {expectedTotalLength - 1}");
-                    // Возможно, пакет повреждён. Можно попробовать сдвинуться на 1 и искать дальше.
                     _receiveBuffer.RemoveAt(0);
                     continue;
                 }
 
-                // Извлекаем полный пакет
                 var packet = _receiveBuffer.Take(expectedTotalLength).ToArray();
                 _receiveBuffer.RemoveRange(0, expectedTotalLength);
-
-                Console.WriteLine($"Обрабатываем пакет длиной {packet.Length} байт");
 
                 var parsed = KittensPackageParser.TryParse(packet, out var error);
                 if (parsed != null)
                 {
                     var (cmd, payload) = parsed.Value;
-                    Console.WriteLine($"Пакет успешно разобран: команда {cmd}");
-
                     try
                     {
                         var handler = _handlerFactory.GetHandler(cmd);
@@ -801,27 +1057,20 @@ public class GameClient
                         await HandleCommandFallback(cmd, payload);
                     }
                 }
-                else
-                {
-                    Console.WriteLine($"Ошибка парсинга: {error}");
-                }
             }
             else
             {
-                Console.WriteLine($"Недостаточно данных: нужно {expectedTotalLength}, есть {_receiveBuffer.Count}");
-                break; // Ждем больше данных
+                break;
             }
         }
     }
 
-    // Метод для получения списка игроков (можно вызвать из GameStateUpdateHandler)
-    public void UpdatePlayersList(List<PlayerInfo> players)
+    public void UpdatePlayersList(List<PlayerInfoDto> players)
     {
         OtherPlayers.Clear();
         OtherPlayers.AddRange(players);
 
-        // Также добавляем себя в список для полноты
-        OtherPlayers.Add(new PlayerInfo
+        OtherPlayers.Add(new PlayerInfoDto
         {
             Id = PlayerId,
             Name = PlayerName,
@@ -836,170 +1085,235 @@ public class GameClient
         {
             case Command.Message:
                 var message = Encoding.UTF8.GetString(payload);
-                AddToLog($"Сообщение: {message}");
+                AddToLog(message);
                 break;
 
             case Command.Error:
                 if (payload.Length > 0)
                 {
                     var error = (CommandResponse)payload[0];
-                    AddToLog($"Ошибка: {error}");
+                    AddToLog($"❌ Ошибка: {GetErrorMessage(error)}");
                 }
                 break;
 
             default:
-                AddToLog($"Необработанная команда: {command}");
+                // Не показываем технические сообщения пользователю
                 break;
         }
 
         await Task.CompletedTask;
     }
 
+    private string GetErrorMessage(CommandResponse error)
+    {
+        return error switch
+        {
+            CommandResponse.GameNotFound => "Игра не найдена",
+            CommandResponse.PlayerNotFound => "Игрок не найден",
+            CommandResponse.NotYourTurn => "Не ваш ход",
+            CommandResponse.InvalidAction => "Недопустимое действие",
+            CommandResponse.GameFull => "Игра заполнена",
+            CommandResponse.GameAlreadyStarted => "Игра уже началась",
+            CommandResponse.CardNotFound => "Карта не найдена",
+            CommandResponse.NotEnoughCards => "Недостаточно карт",
+            CommandResponse.PlayerNotAlive => "Игрок выбыл",
+            CommandResponse.SessionNotFound => "Сессия не найдена",
+            CommandResponse.Unauthorized => "Неавторизованный доступ",
+            _ => $"Ошибка: {error}"
+        };
+    }
+
     private void DisplayHelp()
     {
         Console.Clear();
-        Console.WriteLine("=== ВЗРЫВНЫЕ КОТЯТА ===");
+        PrintHeader();
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("📚 ОСНОВНЫЕ КОМАНДЫ:");
+        Console.ResetColor();
+        Console.WriteLine("══════════════════════════════════════════════════════════════════");
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("🎮 УПРАВЛЕНИЕ ИГРОЙ:");
+        Console.ResetColor();
+        Console.WriteLine("  games / list       - Показать доступные игры");
+        Console.WriteLine("  create                - Создать новую игровую комнату");
+        Console.WriteLine("  join [ID]             - Присоединиться к существующей игре");
+        Console.WriteLine("  start                 - Начать игру (только создатель)");
+        Console.WriteLine("  hand                  - Показать ваши карты");
+        Console.WriteLine("  players               - Показать всех игроков и их ID");
         Console.WriteLine();
-        Console.WriteLine("Основные команды:");
-        Console.WriteLine("  create [имя]          - Создать новую игру");
-        Console.WriteLine("  join [ID] [имя]       - Присоединиться к игре");
-        Console.WriteLine("  start                 - Начать игру (если создатель)");
-        Console.WriteLine("  play [номер] [цель]   - Сыграть карту");
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("🎴 ИГРОВЫЕ ДЕЙСТВИЯ:");
+        Console.ResetColor();
+        Console.WriteLine("  play [номер]          - Сыграть карту без цели");
+        Console.WriteLine("                         💡 Пример: play 0");
+        Console.WriteLine();
         Console.WriteLine("  draw                  - Взять карту из колоды");
-        Console.WriteLine("  combo 2 [1,2] [цель]  - Сыграть комбо (2 одинаковые или с одинаковой иконкой)");
-        Console.WriteLine("  combo 3 [1,2,3] [цель] [карта] - Сыграть комбо (3 одинаковые или с одинаковой иконкой)");
-        Console.WriteLine("  combo 5 [1,2,3,4,5]   - Сыграть комбо (5 разных с разными иконками)");
-        Console.WriteLine("  nope                  - Сыграть карту НЕТ");
-        Console.WriteLine("  defuse [позиция]      - Обезвредить котенка");
+        Console.WriteLine("                         ⚠️ Обязательно в конце хода!");
+        Console.WriteLine();
+        Console.WriteLine("  combo 2 [номера]      - Слепой Карманник (2 одинаковые карты)");
+        Console.WriteLine("                         💡 Пример: combo 2 0,1 550e8400...");
+        Console.WriteLine("                         📝 Затем: steal [номер_карты_цели]");
+        Console.WriteLine();
+        Console.WriteLine("  combo 3 [номера]      - Время Рыбачить (3 одинаковые)");
+        Console.WriteLine("                         💡 Пример: combo 3 2,3,4 550e8400... Такокот");
+        Console.WriteLine("                         📝 Запрашивает конкретную карту у цели");
+        Console.WriteLine();
+        Console.WriteLine("  combo 5 [номера]      - Воровство из сброса (5 разных карт)");
+        Console.WriteLine("                         💡 Пример: combo 5 0,1,2,3,4");
+        Console.WriteLine("                         📝 Затем: takediscard [номер_карты_из_сброса]");
+        Console.WriteLine();
+        Console.WriteLine("  nope [ID_действия]    - Отменить действие картой НЕТ");
+        Console.WriteLine("                         💡 Пример: nope 123e4567...");
+        Console.WriteLine("                         📝 ID действия показывается при атаке/комбо");
+        Console.WriteLine();
+        Console.WriteLine("  defuse [позиция]      - Обезвредить Взрывного Котенка");
+        Console.WriteLine("                         💡 Пример: defuse 3");
+        Console.WriteLine("                         ⏰ 30 секунд на реакцию!");
+        Console.WriteLine();
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("🤝 ВЗАИМОДЕЙСТВИЕ С ИГРОКАМИ:");
+        Console.ResetColor();
         Console.WriteLine("  give [номер]          - Отдать карту при запросе 'Одолжения'");
-        Console.WriteLine("  steal [номер]         - Выбрать карту при 'Слепом карманнике'");
-        Console.WriteLine("  takediscard [номер]   - Выбрать карту из сброса при комбо 5");
-        Console.WriteLine("  hand                  - Показать карты на руке");
-        Console.WriteLine("  state                 - Показать состояние игры");
-        Console.WriteLine("  players               - Показать игроков");
+        Console.WriteLine("                         💡 Пример: give 2");
+        Console.WriteLine("                         ⏰ 30 секунд на выбор!");
+        Console.WriteLine();
+        Console.WriteLine("  steal [номер]         - Выбрать скрытую карту в 'Слепом Карманнике'");
+        Console.WriteLine("                         💡 Пример: steal 1");
+        Console.WriteLine("                         ⏰ 30 секунд на выбор!");
+        Console.WriteLine();
+        Console.WriteLine("  takediscard [номер]   - Взять карту из сброса в комбо 5");
+        Console.WriteLine("                         💡 Пример: takediscard 0");
+        Console.WriteLine("                         ⏰ 30 секунд на выбор!");
+        Console.WriteLine();
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("⚙️  СИСТЕМНЫЕ КОМАНДЫ:");
+        Console.ResetColor();
         Console.WriteLine("  help                  - Показать эту справку");
-        Console.WriteLine("  exit                  - Выйти из игры");
+        Console.WriteLine("  clear                 - Очистить экран");
+        Console.WriteLine("  exit / quit           - Выйти из игры");
+        Console.WriteLine("══════════════════════════════════════════════════════════════════");
         Console.WriteLine();
-        Console.WriteLine("ПРАВИЛА ХОДА:");
-        Console.WriteLine("  • Можно играть любое количество карт за ход");
-        Console.WriteLine("  • В конце хода ОБЯЗАТЕЛЬНО взять карту из колоды (draw)");
-        Console.WriteLine("  • Исключения:");
-        Console.WriteLine("      - Карта 'Пропустить' завершает ход БЕЗ взятия карты");
-        Console.WriteLine("      - Карта 'Атаковать' завершает ход БЕЗ взятия карты");
-        Console.WriteLine("      - Следующий игрок после 'Атаковать' ходит ДВАЖДЫ");
-        Console.WriteLine("  • После взятия карты (draw) ход автоматически переходит следующему");
+
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("🎯 КАК ИСПОЛЬЗОВАТЬ:");
+        Console.ResetColor();
+        Console.WriteLine("  1. Создайте игру: 'create ВашеИмя'");
+        Console.WriteLine("  2. Сообщите ID другим игрокам");
+        Console.WriteLine("  3. Начните игру: 'start' (когда все присоединятся)");
+        Console.WriteLine("  4. Используйте 'hand' чтобы видеть карты");
+        Console.WriteLine("  5. Используйте 'players' чтобы получить ID других игроков");
+        Console.WriteLine("  6. Для атаки или комбо скопируйте ID цели из списка игроков");
         Console.WriteLine();
-        Console.WriteLine("КАРТЫ:");
-        Console.WriteLine("  • Заглянуть в будущее - показывает 3 верхние карты колоды");
-        Console.WriteLine("  • Атаковать - заканчивает ваш ход, следующий игрок ходит дважды");
-        Console.WriteLine("  • Пропустить - заканчивает ход без взятия карты");
-        Console.WriteLine("  • Нет - отменяет действие любой карты (кроме Взрывного Котенка и Обезвредить)");
-        Console.WriteLine("  • Одолжение - берет карту у другого игрока (у него 30 сек на выбор)");
-        Console.WriteLine("  • Перемешать - перемешивает колоду");
-        Console.WriteLine("  • Обезвредить - спасает от Взрывного Котенка");
-        Console.WriteLine("  • Карты котиков - играются только в комбо");
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("💡 ПРАВИЛА ХОДА:");
+        Console.ResetColor();
+        Console.WriteLine("  • За ход можно сыграть сколько угодно карт");
+        Console.WriteLine("  • В конце хода ОБЯЗАТЕЛЬНО возьмите карту (draw)");
+        Console.WriteLine("  • Исключения: карты 'Пропустить' и 'Атаковать'");
+        Console.WriteLine("  • Карта 'Атаковать' заставляет следующего игрока ходить дважды");
+        Console.WriteLine("  • Карта 'Нет' может отменять другие карты (кроме взрывного котенка)");
         Console.WriteLine();
-        Console.WriteLine("КОМБО (карты котиков):");
-        Console.WriteLine("  • 2 одинаковые (СЛЕПОЙ КАРМАННИК) - украсть карту ВСЛЕПУЮ у другого игрока");
-        Console.WriteLine("      • Целевой игрок показывает карты рубашкой вверх");
-        Console.WriteLine("      • Вы выбираете карту наугад по номеру");
-        Console.WriteLine("      ФОРМАТ:");
-        Console.WriteLine("        1. combo 2 [номера_ваших_карт] [ID_целевого_игрока] - Начать кражу");
-        Console.WriteLine("        2. Вам покажут скрытые карты цели");
-        Console.WriteLine("        3. steal [номер_карты] - Выбрать карту по номеру");
-        Console.WriteLine("      ПРИМЕР:");
-        Console.WriteLine("        combo 2 0,1 550e8400-e29b-41d4-a716-446655440000");
-        Console.WriteLine("        (после показа карт) steal 2");
-        Console.WriteLine();
-        Console.WriteLine("  • 3 одинаковые (ВРЕМЯ РЫБАЧИТЬ) - запросить КОНКРЕТНУЮ карту у другого игрока");
-        Console.WriteLine("      • Назовите карту, которую хотите получить");
-        Console.WriteLine("      • Если у цели есть эта карта - вы её забираете");
-        Console.WriteLine("      • Если нет - ничего не получаете");
-        Console.WriteLine("      ФОРМАТ: combo 3 [номера_карт] [ID_целевого_игрока] [название_карты]");
-        Console.WriteLine("      ПРИМЕРЫ:");
-        Console.WriteLine("        combo 3 0,1,2 550e8400... Такокот");
-        Console.WriteLine("        combo 3 0,1,2 550e8400... Атаковать");
-        Console.WriteLine("        combo 3 0,1,2 550e8400... Обезвредить");
-        Console.WriteLine("        combo 3 0,1,2 550e8400... Заглянуть в будущее");
-        Console.WriteLine("        combo 3 0,1,2 550e8400... 'Заглянуть в будущее' (в кавычках для названий с пробелами)");
-        Console.WriteLine();
-        Console.WriteLine("  • 5 разных (ВОРУЙ ИЗ КОЛОДЫ СБРОСА) - взять карту из колоды сброса");
-        Console.WriteLine("      • Показываются все карты в сбросе");
-        Console.WriteLine("      • Вы выбираете любую карту");
-        Console.WriteLine("      ФОРМАТ: combo 5 [номера_карт]");
-        Console.WriteLine("      ПРИМЕР: combo 5 0,1,2,3,4");
-        Console.WriteLine();
-        Console.WriteLine("ДОСТУПНЫЕ НАЗВАНИЯ КАРТ:");
-        Console.WriteLine("  • Взрывной Котенок    • Пропустить          • Радужный Кот");
-        Console.WriteLine("  • Обезвредить         • Одолжение          • Котобородач");
-        Console.WriteLine("  • Нет                 • Перемешать         • Кошка-Картошка");
-        Console.WriteLine("  • Атаковать           • Заглянуть в будущее • Арбузный Котэ");
-        Console.WriteLine("                                              • Такокот");
-        Console.WriteLine();
-        Console.WriteLine("ПРИМЕРЫ КОМАНД:");
-        Console.WriteLine("  create Иван             - Создать игру");
-        Console.WriteLine("  join 123abc Петр        - Присоединиться к игре");
-        Console.WriteLine("  play 0                  - Сыграть первую карту");
-        Console.WriteLine("  play 1 550e8400...      - Сыграть карту на игрока с ID");
-        Console.WriteLine("  draw                    - Взять карту из колоды");
-        Console.WriteLine("  give 2                  - Отдать третью карту при 'Одолжении'");
-        Console.WriteLine("  steal 2                 - Выбрать карту #2 при 'Слепом карманнике'");
-        Console.WriteLine("  takediscard 1           - Выбрать карту #1 из сброса");
-        Console.WriteLine();
-        Console.WriteLine("ПОЛНЫЙ ПРИМЕР КОМБО 2:");
-        Console.WriteLine("  1. hand                 - Смотрите свои карты");
-        Console.WriteLine("  2. combo 2 0,1 abcdef... - Играете две одинаковые карты на игрока");
-        Console.WriteLine("  3. Вам показывают: ❓❓❓❓ (4 скрытые карты)");
-        Console.WriteLine("  4. steal 2              - Выбираете карту #2 наугад");
-        Console.WriteLine("  5. Вы получаете случайную карту, цель теряет её");
-        Console.WriteLine();
-        Console.WriteLine("ПОЛНЫЙ ПРИМЕР КОМБО 3:");
-        Console.WriteLine("  1. players              - Смотрите ID других игроков");
-        Console.WriteLine("  2. hand                 - Смотрите свои карты");
-        Console.WriteLine("  3. combo 3 0,1,2 abcdef... Такокот - Запрашиваете карту Такокот");
-        Console.WriteLine("  4. Сервер проверяет, есть ли у цели карта 'Такокот'");
-        Console.WriteLine("  5. Если есть - вы забираете её, если нет - ничего не получаете");
-        Console.WriteLine();
-        Console.WriteLine("ПОЛНЫЙ ПРИМЕР КОМБО 5:");
-        Console.WriteLine("  1. combo 5 0,1,2,3,4    - Играете 5 разных карт");
-        Console.WriteLine("  2. Вам показывают карты в сбросе с номерами");
-        Console.WriteLine("  3. takediscard 2        - Выбираете карту #2 из сброса");
-        Console.WriteLine("  4. Вы получаете выбранную карту");
+
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("⚠️  ВАЖНО:");
+        Console.ResetColor();
+        Console.WriteLine("  • При взрывном котенке у вас 30 секунд на 'defuse'");
+        Console.WriteLine("  • При 'Одолжении' у цели 30 секунд на 'give'");
+        Console.WriteLine("  • При 'Слепом Карманнике' у вас 30 секунд на 'steal'");
+        Console.WriteLine("  • Все ID можно скопировать выделением текста и Ctrl+C");
         Console.WriteLine();
     }
 
     public void DisplayHand()
     {
-        Console.WriteLine("\n=== ВАШИ КАРТЫ ===");
+        if (DateTime.Now - _lastDisplayTime < TimeSpan.FromMilliseconds(DISPLAY_COOLDOWN_MS) && _handDisplayed)
+            return;
+
+        _lastDisplayTime = DateTime.Now;
+        _handDisplayed = true;
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                     🃏 ВАШИ КАРТЫ 🃏                        ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
         if (Hand.Count == 0)
         {
-            Console.WriteLine("У вас нет карт.");
+            Console.WriteLine("   У вас нет карт.");
             return;
         }
 
+        // Отображаем все карты в одной колонке с полными названиями
         for (int i = 0; i < Hand.Count; i++)
         {
             var card = Hand[i];
             Console.ForegroundColor = GetCardColor(card.Type);
-            Console.WriteLine($"{i}. {card.Name} - {card.Description}");
-            Console.ResetColor();
+            Console.Write($"   {i,2}.");
+
+            // Выделяем название карты жирным
+            Console.Write($"{card.Name}\n");
         }
-        Console.WriteLine("==================");
     }
 
     private void DisplayPlayers()
     {
-        Console.WriteLine("\n=== ИГРОКИ ===");
-        foreach (var player in OtherPlayers)
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                      👥 ИГРОКИ 👥                           ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
+        if (OtherPlayers.Count == 0)
         {
-            var status = player.IsAlive ? "жив" : "выбыл";
-            var current = player.IsCurrentPlayer ? " ← сейчас ходит" : "";
-            Console.WriteLine($"{player.Name} ({status}){current}");
-            Console.WriteLine($"  ID: {player.Id}");
-            Console.WriteLine($"  Карт: {player.CardCount}");
+            Console.WriteLine("   Нет информации об игроках.");
+            Console.WriteLine("   💡 Используйте команду 'state' для получения информации.");
+            return;
+        }
+
+        // Сортируем игроков: сначала текущий, затем остальные
+        var sortedPlayers = OtherPlayers
+            .OrderByDescending(p => p.IsCurrentPlayer)
+            .ThenBy(p => p.Name)
+            .ToList();
+
+        Console.WriteLine("   Статус: ✅ - жив, 💀 - выбыл, 🎮 - сейчас ходит");
+        Console.WriteLine();
+
+        foreach (var player in sortedPlayers)
+        {
+            var statusIcon = player.IsAlive ? "✅" : "💀";
+            var currentIcon = player.IsCurrentPlayer ? "🎮" : "  ";
+
+            Console.ForegroundColor = player.IsCurrentPlayer ? ConsoleColor.Yellow :
+                                    player.IsAlive ? ConsoleColor.White : ConsoleColor.DarkGray;
+
+            Console.Write($"   {currentIcon} {player.Name,-15} {statusIcon}");
+            Console.WriteLine($"  Карт: {player.CardCount,2}");
+
+            if (player.Id == PlayerId)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine($"        👤 Вы (ID: {player.Id})");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine($"        ID: {player.Id}");
+            }
+
             Console.WriteLine();
         }
-        Console.WriteLine("==============");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("   💡 Для копирования ID выделите текст и нажмите Ctrl+C");
+        Console.ResetColor();
     }
 
     private ConsoleColor GetCardColor(CardType type)
@@ -1024,14 +1338,94 @@ public class GameClient
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
         GameLog.Add($"[{timestamp}] {message}");
 
-        // Ограничиваем размер лога
         if (GameLog.Count > 50)
             GameLog.RemoveAt(0);
 
-        // Выводим сообщение
-        Console.ForegroundColor = ConsoleColor.Gray;
+        // Пропускаем технические и информационные сообщения
+        if (ShouldFilterMessage(message))
+        {
+            return; // Не показываем эти сообщения
+        }
+
+        // Определяем тип сообщения по иконкам/содержанию
+        if (message.Contains("💥") || message.Contains("❌") || message.Contains("Ошибка"))
+            Console.ForegroundColor = ConsoleColor.Red;
+        else if (message.Contains("✅") || message.Contains("🎉") || message.Contains("ПОБЕДА"))
+            Console.ForegroundColor = ConsoleColor.Green;
+        else if (message.Contains("🎮") || message.Contains("ВАШ ХОД") || message.Contains("Сейчас ходит"))
+            Console.ForegroundColor = ConsoleColor.Yellow;
+        else if (message.Contains("💡") || message.Contains("Подсказка"))
+            Console.ForegroundColor = ConsoleColor.Cyan;
+        else if (message.Contains("⚠️") || message.Contains("Внимание") || message.Contains("таймаут"))
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+        else if (message.Contains("Неверный формат") || message.Contains("Не удалось"))
+            Console.ForegroundColor = ConsoleColor.Red;
+        else
+            Console.ForegroundColor = ConsoleColor.Gray;
+
         Console.WriteLine($"[{timestamp}] {message}");
         Console.ResetColor();
+    }
+
+    private bool ShouldFilterMessage(string message)
+    {
+        // Список фраз для фильтрации
+        var filterPatterns = new[]
+        {
+        "DEBUG",
+        "SendCreateGame",
+        "SendJoinGame",
+        "Package length",
+        "Package bytes",
+        "Получено байт",
+        "Обрабатываем пакет",
+        "Пакет успешно разобран",
+        "Необработанная команда:",
+        "Обновлена рука. Карт:",
+        "Игроков в игре:",
+        "Карт в колоде:",
+        "Ходов сыграно:",
+        "DEBUG:",
+        "DEBUG Client:",
+        "Отправляем FavorResponse:",
+        "SendUseCombo:",
+        "Ввод:",
+        "Разделено на",
+        "parts["
+    };
+
+        // Фильтруем статистические сообщения GameStateUpdateHandler
+        var gameStatePatterns = new[]
+        {
+        "Игроков в игре:",
+        "Карт в колоде:",
+        "Ходов сыграно:"
+    };
+
+        // Фильтруем сообщения об обновлении руки
+        var handUpdatePatterns = new[]
+        {
+        "Обновлена рука. Карт:"
+    };
+
+        // Проверяем все паттерны
+        foreach (var pattern in filterPatterns)
+        {
+            if (message.Contains(pattern))
+                return true;
+        }
+
+        // Дополнительно фильтруем сообщения, которые содержат только статистику
+        if (message.Contains("Игроков в игре:") ||
+            message.Contains("Карт в колоде:") ||
+            message.Contains("Ходов сыграно:"))
+        {
+            // Проверяем, не является ли это частью более важного сообщения
+            if (!message.Contains("🎉") && !message.Contains("🏆") && !message.Contains("💥"))
+                return true;
+        }
+
+        return false;
     }
 
     public async Task Stop()
@@ -1054,85 +1448,66 @@ public class GameClient
             _socket.Close();
         }
 
-        Console.WriteLine("Клиент остановлен.");
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("\n👋 Клиент остановлен.");
+        Console.ResetColor();
     }
 
     private async Task HandleEndTurnCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
+        PrintInfo("Завершаю ход...");
         await _helper.SendEndTurn(SessionId.Value, PlayerId);
-        Console.WriteLine("Завершение хода...");
-    }
-
-    private async Task HandleChooseCommand(string[] parts)
-    {
-        if (!SessionId.HasValue)
-        {
-            Console.WriteLine("Вы не в игре.");
-            return;
-        }
-
-        if (parts.Length < 2 || !int.TryParse(parts[1], out var cardIndex))
-        {
-            Console.WriteLine("Использование: choose [номер_карты]");
-            Console.WriteLine("Или: give [номер_карты]");
-            return;
-        }
-
-        // Отправляем выбор карты серверу
-        await _helper.SendChooseCard(SessionId.Value, PlayerId, cardIndex);
-        Console.WriteLine($"Отдаем карту #{cardIndex}");
     }
 
     private async Task HandleFavorCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
         if (parts.Length < 4)
         {
-            Console.WriteLine("❌ Использование: favor [ID_игры] [ваш_ID] [номер_карты]");
-            Console.WriteLine($"📋 Пример: favor {SessionId.Value} {PlayerId} 0");
+            Console.WriteLine("📝 Использование: favor [ID_игры] [ваш_ID] [номер_карты]");
+            Console.WriteLine($"💡 Пример: favor {SessionId.Value} {PlayerId} 0");
             return;
         }
 
         if (!Guid.TryParse(parts[1], out var gameId) || gameId != SessionId.Value)
         {
-            Console.WriteLine("❌ Неверный ID игры");
+            PrintError("Неверный ID игры");
             return;
         }
 
         if (!Guid.TryParse(parts[2], out var playerId) || playerId != PlayerId)
         {
-            Console.WriteLine("❌ Неверный ваш ID");
+            PrintError("Неверный ваш ID");
             return;
         }
 
         if (!int.TryParse(parts[3], out var cardIndex))
         {
-            Console.WriteLine("❌ Неверный номер карты");
+            PrintError("Неверный номер карты");
             DisplayHand();
             return;
         }
 
         if (cardIndex < 0 || cardIndex >= Hand.Count)
         {
-            Console.WriteLine($"❌ Неверный номер карты! У вас {Hand.Count} карт (0-{Hand.Count - 1})");
+            PrintError($"Неверный номер карты! У вас {Hand.Count} карт (0-{Hand.Count - 1})");
             DisplayHand();
             return;
         }
 
         var card = Hand[cardIndex];
-        Console.WriteLine($"📤 Отдаю карту #{cardIndex}: {card.Name}");
-
+        PrintInfo($"📤 Отдаю карту #{cardIndex}: {card.Name}");
         await _helper.SendFavorResponse(gameId, playerId, cardIndex);
     }
 
@@ -1140,60 +1515,57 @@ public class GameClient
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
         if (parts.Length < 2 || !int.TryParse(parts[1], out var cardIndex))
         {
-            Console.WriteLine("❌ Использование: give [номер_карты]");
-            Console.WriteLine($"💡 Или используйте: favor {SessionId.Value} {PlayerId} [номер_карты]");
+            Console.WriteLine("📝 Использование: give [номер_карты]");
             DisplayHand();
             return;
         }
 
         if (cardIndex < 0 || cardIndex >= Hand.Count)
         {
-            Console.WriteLine($"❌ Неверный номер карты! У вас {Hand.Count} карт (0-{Hand.Count - 1})");
+            PrintError($"Неверный номер карты! У вас {Hand.Count} карт (0-{Hand.Count - 1})");
             DisplayHand();
             return;
         }
 
         var card = Hand[cardIndex];
-        Console.WriteLine($"📤 Отдаю карту #{cardIndex}: {card.Name}");
-
-        // Используем сокращенную команду (требует SessionId и PlayerId)
+        PrintInfo($"📤 Отдаю карту #{cardIndex}: {card.Name}");
         await _helper.SendFavorResponse(SessionId.Value, PlayerId, cardIndex);
+
+        // Ждем немного для получения ответа от сервера
+        await Task.Delay(300);
+
+        // ПОКАЗЫВАЕМ РУКУ ПОСЛЕ ОТДАЧИ КАРТЫ
+        DisplayHand();
     }
 
     private async Task HandleStealCommand(string[] parts)
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
-        // УПРОЩАЕМ: команда должна быть просто "steal [номер_карты]"
-        // Все остальные данные (ID игры, ID игрока, ID цели) уже известны из контекста комбо 2
         if (parts.Length < 2)
         {
-            Console.WriteLine("❌ Использование: steal [номер_карты]");
-            Console.WriteLine($"💡 Пример: steal 2");
-            Console.WriteLine($"📝 Выберите номер скрытой карты (0, 1, 2, ...)");
+            Console.WriteLine("📝 Использование: steal [номер_карты]");
+            Console.WriteLine("💡 Пример: steal 2");
             return;
         }
 
         if (!int.TryParse(parts[1], out var cardIndex))
         {
-            Console.WriteLine("❌ Неверный номер карты! Введите число.");
+            PrintError("Неверный номер карты! Введите число.");
             return;
         }
 
-        Console.WriteLine($"🎭 Краду карту #{cardIndex}...");
-
-        // Отправляем на сервер ТОЛЬКО номер карты
-        // Сервер сам знает остальные данные из контекста (из PendingStealAction)
+        PrintInfo($"🎭 Краду карту #{cardIndex}...");
         await _helper.SendStealCard(SessionId.Value, PlayerId, cardIndex);
     }
 
@@ -1201,27 +1573,24 @@ public class GameClient
     {
         if (!SessionId.HasValue)
         {
-            Console.WriteLine("Вы не в игре.");
+            PrintError("Вы не в игре.");
             return;
         }
 
-        // Команда: takediscard [номер_карты]
         if (parts.Length < 2)
         {
-            Console.WriteLine("❌ Использование: takediscard [номер_карты]");
-            Console.WriteLine($"💡 Пример: takediscard 1");
+            Console.WriteLine("📝 Использование: takediscard [номер_карты]");
+            Console.WriteLine("💡 Пример: takediscard 1");
             return;
         }
 
         if (!int.TryParse(parts[1], out var cardIndex))
         {
-            Console.WriteLine("❌ Неверный номер карты! Введите число.");
+            PrintError("Неверный номер карты! Введите число.");
             return;
         }
 
-        Console.WriteLine($"🎨 Беру карту #{cardIndex} из сброса...");
-
-        // Отправляем на сервер ТОЛЬКО номер карты
+        PrintInfo($"🎨 Беру карту #{cardIndex} из сброса...");
         await _helper.SendTakeFromDiscard(SessionId.Value, PlayerId, cardIndex);
     }
 
@@ -1229,29 +1598,20 @@ public class GameClient
     {
         try
         {
+            Console.CursorVisible = true;
             var input = Console.ReadLine();
+            Console.CursorVisible = true;
 
-            // Отладка
-            Console.WriteLine($"DEBUG ReadLineSafe: получено {input?.Length ?? 0} символов");
-
-            if (input != null)
+            if (input != null && input.Any(c => c == '\0'))
             {
-                // Проверяем на нулевые символы
-                if (input.Any(c => c == '\0'))
-                {
-                    Console.WriteLine($"⚠️  Обнаружены нулевые символы, заменяем...");
-                    input = new string(input.Where(c => c != '\0').ToArray());
-                }
-
-                // Также проверяем другие проблемные символы
-                input = input.Replace("\0", ""); // Еще раз на всякий случай
+                input = new string(input.Where(c => c != '\0').ToArray());
             }
 
             return input?.Trim();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка чтения ввода: {ex.Message}");
+            PrintError($"Ошибка чтения ввода: {ex.Message}");
             return null;
         }
     }
@@ -1261,16 +1621,13 @@ public class GameClient
         if (OtherPlayers.Count == 0)
         {
             Console.WriteLine("⚠️  Информация о других игроках не загружена.");
-            Console.WriteLine("   Используйте команду 'players' для обновления списка.");
+            Console.WriteLine("   💡 Используйте команду 'players' для обновления списка.");
             return;
         }
 
-        Console.WriteLine("👥 ДРУГИЕ ИГРОКИ:");
-        Console.WriteLine("══════════════════════════════════════════");
-
-        // Фильтруем: только живые игроки, не текущий игрок
         var alivePlayers = OtherPlayers
             .Where(p => p.IsAlive && p.Id != PlayerId)
+            .OrderBy(p => p.Name)
             .ToList();
 
         if (alivePlayers.Count == 0)
@@ -1279,14 +1636,92 @@ public class GameClient
             return;
         }
 
-        foreach (var player in alivePlayers)
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                     🎯 ДОСТУПНЫЕ ЦЕЛИ 🎯                  ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.ResetColor();
+
+        Console.WriteLine("   Доступные цели (автоматически выбирается первая):");
+
+        for (int i = 0; i < alivePlayers.Count; i++)
         {
-            Console.WriteLine($"• {player.Name}");
+            var player = alivePlayers[i];
+            if (i == 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write($"   [⭐] ");
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write($"   [{i}] ");
+            }
+            Console.ResetColor();
+            Console.Write($"{player.Name,-15}");
+            Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine($"  ID: {player.Id}");
-            Console.WriteLine($"  Карт: {player.CardCount}");
-            Console.WriteLine();
+            Console.ResetColor();
+            Console.WriteLine($"      Карт у игрока: {player.CardCount}");
         }
 
-        Console.WriteLine($"Всего доступных целей: {alivePlayers.Count}");
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("   💡 Для выбора другой цели укажите ID в команде:");
+        Console.WriteLine($"   Пример: play [номер_карты] {alivePlayers[0].Id}");
+        Console.WriteLine($"   Пример: combo 2 [номера_карт] {alivePlayers[0].Id}");
+        Console.ResetColor();
+    }
+
+    private bool ValidateComboCards(int comboType, List<Card> cards)
+    {
+        if (cards.Count != comboType) return false;
+
+        switch (comboType)
+        {
+            case 2:
+                return cards[0].Type == cards[1].Type ||
+                       cards[0].IconId == cards[1].IconId;
+            case 3:
+                return (cards[0].Type == cards[1].Type && cards[1].Type == cards[2].Type) ||
+                       (cards[0].IconId == cards[1].IconId && cards[1].IconId == cards[2].IconId);
+            case 5:
+                return cards.Select(c => c.IconId).Distinct().Count() == 5;
+            default:
+                return false;
+        }
+    }
+
+    private void DisplayComboRules(int comboType)
+    {
+        Console.WriteLine("\n📚 Правила комбо:");
+        switch (comboType)
+        {
+            case 2:
+                Console.WriteLine("• 2 одинаковые карты ИЛИ");
+                Console.WriteLine("• 2 карты с одинаковой иконкой");
+                break;
+            case 3:
+                Console.WriteLine("• 3 одинаковые карты ИЛИ");
+                Console.WriteLine("• 3 карты с одинаковой иконкой");
+                break;
+            case 5:
+                Console.WriteLine("• 5 карт с РАЗНЫМИ иконками");
+                break;
+        }
+    }
+
+    private void PrintInfo(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"💡 {message}");
+        Console.ResetColor();
+    }
+
+    private void PrintError(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"❌ {message}");
+        Console.ResetColor();
     }
 }

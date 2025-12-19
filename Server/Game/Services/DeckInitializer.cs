@@ -1,4 +1,4 @@
-﻿using Server.Game.Models;
+﻿using Shared.Models;
 
 namespace Server.Game.Services;
 

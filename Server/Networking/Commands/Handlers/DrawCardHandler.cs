@@ -1,7 +1,7 @@
-﻿using Server.Game.Enums;
-using Server.Game.Models;
+﻿using Server.Game.Models;
 using Server.Infrastructure;
-using Server.Networking.Protocol;
+using Shared.Models;
+using Shared.Protocol;
 using System.Net.Sockets;
 using System.Text;
 
@@ -53,6 +53,9 @@ public class DrawCardHandler : ICommandHandler
             var drawnCard = session.GameDeck.Draw();
             await session.BroadcastMessage($"{player.Name} берет карту из колоды.");
 
+            // ВАЖНО: Сначала добавляем карту в руку!
+            player.AddToHand(drawnCard);
+
             session.TurnManager.CardDrawn();
 
             if (drawnCard.Type == CardType.ExplodingKitten)
@@ -61,7 +64,6 @@ public class DrawCardHandler : ICommandHandler
             }
             else
             {
-                player.AddToHand(drawnCard);
                 await player.Connection.SendMessage($"Вы взяли: {drawnCard.Name}");
                 await player.Connection.SendPlayerHand(player);
 
@@ -86,28 +88,14 @@ public class DrawCardHandler : ICommandHandler
     {
         await session.BroadcastMessage($"💥 {player.Name} вытащил Взрывного Котенка!");
 
-        await SendUrgentExplosionMessage(player, session);
+        Console.WriteLine($"DEBUG DrawCardHandler: У игрока {player.Name} есть Обезвредить? {player.HasDefuseCard}");
 
         if (player.HasDefuseCard)
         {
+            Console.WriteLine($"DEBUG DrawCardHandler: Вызываем RegisterExplosion для {player.Name}");
             PlayDefuseHandler.RegisterExplosion(session, player);
 
             await SendDefuseInstructions(player, session);
-
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-
-            try
-            {
-                await Task.Delay(30000, cts.Token);
-
-                if (PlayDefuseHandler.HasPendingExplosion(player))
-                {
-                    await HandlePlayerElimination(session, player, kittenCard);
-                }
-            }
-            catch (TaskCanceledException)
-            {
-            }
         }
         else
         {
@@ -118,20 +106,18 @@ public class DrawCardHandler : ICommandHandler
 
     private async Task SendDefuseInstructions(Player player, GameSession session)
     {
-        var shortInstructions = new[]
+        var instructions = new[]
         {
-        $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас 30 сек!",
-        $"ID игры: {session.Id}",
-        $"Ваш ID: {player.Id}",
-        $"Команда: defuse {session.Id} {player.Id} [0-5]",
-        $"Коротко: defuse [позиция] (клиент добавит ID)"
+        $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас 30 секунд!",
+        $"Введите команду: defuse",
+        $"⏰ Быстрее! Успейте до конца отсчета!"
     };
 
-        foreach (var message in shortInstructions)
+        foreach (var message in instructions)
         {
             var data = KittensPackageBuilder.MessageResponse(message);
             await player.Connection.SendAsync(data, SocketFlags.None);
-            await Task.Delay(50);
+            await Task.Delay(100);
         }
     }
 

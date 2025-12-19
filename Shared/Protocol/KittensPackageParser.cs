@@ -1,7 +1,7 @@
-﻿using Server.Game.Enums;
-using Server.Networking.Commands;
+﻿
+using Shared.Models;
 
-namespace Server.Networking.Protocol;
+namespace Shared.Protocol;
 
 public static class KittensPackageParser
 {

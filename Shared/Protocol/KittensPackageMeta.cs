@@ -1,4 +1,4 @@
-﻿namespace Server.Networking.Protocol;
+﻿namespace Shared.Protocol;
 
 public static class KittensPackageMeta
 {

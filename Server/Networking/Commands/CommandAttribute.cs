@@ -1,4 +1,6 @@
-﻿namespace Server.Networking.Commands;
+﻿using Shared.Models;
+
+namespace Server.Networking.Commands;
 
 [AttributeUsage(AttributeTargets.Class)]
 public class CommandAttribute(Command command) : Attribute

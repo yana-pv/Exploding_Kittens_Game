@@ -1,4 +1,4 @@
-﻿namespace Server.Game.Models;
+﻿namespace Shared.Models;
 
 public class ClientCardDto
 {
