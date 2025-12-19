@@ -13,8 +13,6 @@ public class Player
     public bool IsAlive { get; set; } = true;
     public int TurnOrder { get; set; }
     public int ExtraTurns { get; set; }
-    public bool IsAttacked { get; set; } = false; 
-    public int TurnsRemaining { get; set; } = 1; 
 
 
     [JsonIgnore]

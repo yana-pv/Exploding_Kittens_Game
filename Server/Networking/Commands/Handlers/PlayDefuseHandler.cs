@@ -1,4 +1,5 @@
 ﻿using Server.Game.Models;
+using Server.Game.Models.Actions;
 using Server.Infrastructure;
 using Shared.Models;
 using System.Collections.Concurrent;
@@ -10,15 +11,6 @@ namespace Server.Networking.Commands.Handlers;
 [Command(Command.PlayDefuse)]
 public class PlayDefuseHandler : ICommandHandler
 {
-    private class PendingExplosion
-    {
-        public Player Player { get; set; } = null!;
-        public GameSession Session { get; set; } = null!;
-        public Card KittenCard { get; set; } = null!;
-        public DateTime Timestamp { get; set; }
-        public CancellationTokenSource TimeoutToken { get; set; } = null!;
-    }
-
     private static readonly ConcurrentDictionary<Guid, PendingExplosion> _pendingExplosions = new();
 
     public async Task Invoke(Socket sender, GameSessionManager sessionManager,

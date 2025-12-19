@@ -62,9 +62,4 @@ public class GameSessionManager
                        DateTime.UtcNow - s.CreatedAt < TimeSpan.FromHours(1))
             .OrderByDescending(s => s.CreatedAt);
     }
-
-    public int GetWaitingGamesCount()
-    {
-        return GetWaitingGames().Count();
-    }
 }

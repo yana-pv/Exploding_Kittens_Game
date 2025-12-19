@@ -1,4 +1,5 @@
 ﻿using Server.Game.Models;
+using Server.Game.Models.Actions;
 using Server.Infrastructure;
 using Shared.Models;
 using System.Collections.Concurrent;
@@ -434,23 +435,4 @@ public class UseComboHandler : ICommandHandler
         _pendingSteals.TryRemove(session.Id, out _);
         return true;
     }
-}
-
-public class PendingStealAction
-{
-    public required Guid SessionId { get; set; }
-    public required Player Player { get; set; }
-    public required Player Target { get; set; }
-    public required List<int> CardIndices { get; set; } 
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-}
-
-public class ComboAction
-{
-    public Guid SessionId { get; set; }
-    public Guid PlayerId { get; set; }
-    public int ComboType { get; set; }
-    public List<int> CardIndices { get; set; } = new();
-    public string? TargetData { get; set; }
-    public DateTime Timestamp { get; set; }
 }

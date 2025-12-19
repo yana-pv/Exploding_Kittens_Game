@@ -1,4 +1,5 @@
-﻿using Server.Game.Services;
+﻿using Server.Game.Models.Actions;
+using Server.Game.Services;
 using Shared.Models;
 using Shared.Protocol;
 using System.Net.Sockets;
@@ -274,14 +275,5 @@ public class GameSession
         };
 
         return JsonSerializer.Serialize(state);
-    }
-
-
-    public class PendingFavorAction
-    {
-        public required Player Requester { get; set; }
-        public required Player Target { get; set; }
-        public required Card Card { get; set; }
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 }

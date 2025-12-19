@@ -1,4 +1,5 @@
 ﻿using Server.Game.Models;
+using Server.Game.Models.Actions;
 using Server.Infrastructure;
 using Shared.Models;
 using System.Collections.Concurrent;
@@ -10,14 +11,6 @@ namespace Server.Networking.Commands.Handlers;
 [Command(Command.TakeFromDiscard)]
 public class TakeFromDiscardHandler : ICommandHandler
 {
-    private class PendingDiscardAction
-    {
-        public required Guid SessionId { get; set; }
-        public required Player Player { get; set; }
-        public required List<int> CardIndices { get; set; } 
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-    }
-
     private static readonly ConcurrentDictionary<Guid, PendingDiscardAction> _pendingDiscardActions = new();
 
     public async Task Invoke(Socket sender, GameSessionManager sessionManager,

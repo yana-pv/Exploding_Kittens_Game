@@ -121,16 +121,6 @@ public class DrawCardHandler : ICommandHandler
         }
     }
 
-    private async Task SendUrgentExplosionMessage(Player player, GameSession session)
-    {
-        var urgentMessage = player.HasDefuseCard
-            ? $"💣 ВЗРЫВНОЙ КОТЕНОК! У вас есть Обезвредить!\nУ вас 30 секунд!"
-            : $"💣 ВЗРЫВНОЙ КОТЕНОК! Нет Обезвредить!\n💥 Вы выбываете!";
-
-        var data = KittensPackageBuilder.MessageResponse(urgentMessage);
-        await player.Connection.SendAsync(data, SocketFlags.None);
-    }
-
     private async Task SendNoDefuseMessage(Player player)
     {
         var message = "❌ У вас нет карты Обезвредить!\n" +

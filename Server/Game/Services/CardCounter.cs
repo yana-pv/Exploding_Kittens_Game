@@ -1,4 +1,5 @@
-﻿using Shared.Models;
+﻿using Server.Game.Models;
+using Shared.Models;
 
 namespace Server.Game.Services;
 
@@ -67,9 +68,3 @@ public class CardCounter
     }
 }
 
-public enum CardLocation
-{
-    Deck,
-    Discard,
-    Hand
-}
