@@ -23,6 +23,9 @@ public class GameListHandler : IClientCommandHandler
             var games = JsonSerializer.Deserialize<List<GameInfo>>(json, options);
             if (games != null && games.Count > 0)
             {
+                // Сохраняем игры в клиенте для быстрого доступа
+                client.UpdateAvailableGames(games);
+                // Отображаем список
                 client.DisplayAvailableGames(games);
             }
             else
