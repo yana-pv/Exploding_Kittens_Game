@@ -76,7 +76,7 @@ public class GameConsoleRenderer
 
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                     🃏 ВАШИ КАРТЫ 🃏                        ║");
+        Console.WriteLine("║                     🃏 ВАШИ КАРТЫ 🃏                         ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.ResetColor();
 
@@ -158,7 +158,7 @@ public class GameConsoleRenderer
 
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                🎮 ДОСТУПНЫЕ ИГРЫ 🎮                     ║");
+        Console.WriteLine("║                🎮 ДОСТУПНЫЕ ИГРЫ 🎮                        ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.ResetColor();
 
@@ -205,10 +205,10 @@ public class GameConsoleRenderer
         Console.WriteLine("\n   💡 КАК ПРИСОЕДИНИТЬСЯ:");
         Console.ResetColor();
         Console.WriteLine("      1. Выберите номер игры (1, 2, 3...)");
-        Console.WriteLine($"      2. Введите команду: join [номер] [ваше_имя]");
+        Console.WriteLine($"      2. Введите команду: join [номер]");
         Console.WriteLine();
         Console.WriteLine($"   💡 Пример для игры #1:");
-        Console.WriteLine($"      join 1 {_client.PlayerName}");
+        Console.WriteLine($"      join 1");
         Console.WriteLine();
         Console.WriteLine("   💡 Или создайте новую игру: create");
         Console.ResetColor();
@@ -268,10 +268,10 @@ public class GameConsoleRenderer
         Console.ResetColor();
         Console.WriteLine("  games / list       - Показать доступные игры");
         Console.WriteLine("  create             - Создать новую игровую комнату");
-        Console.WriteLine("  join [номер] [имя] - Присоединиться к игре по номеру");
-        Console.WriteLine("     Пример: join 1 Иван");
-        Console.WriteLine("  join [ID] [имя]    - Присоединиться к игре по ID");
-        Console.WriteLine("     Пример: join 550e8400... Иван");
+        Console.WriteLine("  join [номер]       - Присоединиться к игре по номеру");
+        Console.WriteLine("     Пример: join 1");
+        Console.WriteLine("  join [ID]          - Присоединиться к игре по ID");
+        Console.WriteLine("     Пример: join 550e8400... ");
         Console.WriteLine("  start              - Начать игру (только создатель)");
         Console.WriteLine("  hand               - Показать ваши карты");
         Console.WriteLine("  players            - Показать всех игроков и их ID");
@@ -298,11 +298,11 @@ public class GameConsoleRenderer
         Console.WriteLine("                         💡 Пример: combo 5 0,1,2,3,4");
         Console.WriteLine("                         📝 Затем: takediscard [номер_карты_из_сброса]");
         Console.WriteLine();
-        Console.WriteLine("  nope [ID_действия]    - Отменить действие картой НЕТ");
+        Console.WriteLine("  nope                  - Отменить действие картой НЕТ");
         Console.WriteLine("                         💡 Пример: nope 123e4567...");
         Console.WriteLine("                         📝 ID действия показывается при атаке/комбо");
         Console.WriteLine();
-        Console.WriteLine("  defuse [позиция]      - Обезвредить Взрывного Котенка");
+        Console.WriteLine("  defuse                - Обезвредить Взрывного Котенка");
         Console.WriteLine("                         💡 Пример: defuse 3");
         Console.WriteLine("                         ⏰ 30 секунд на реакцию!");
         Console.WriteLine();

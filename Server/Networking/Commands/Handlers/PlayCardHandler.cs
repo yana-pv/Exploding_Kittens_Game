@@ -132,12 +132,10 @@ public class PlayCardHandler : ICommandHandler
                     break;
             }
 
-            // Удаляем карту из руки и сбрасываем ее
             player.Hand.RemoveAt(cardIndex);
             session.GameDeck.Discard(card);
             session.TurnManager.CardPlayed(card);
 
-            // Отправляем общее сообщение о сыгранной карте (только для определенных карт)
             await SendCardPlayedMessages(session, player, card, shouldEndTurn);
 
             if (shouldEndTurn)
@@ -170,38 +168,31 @@ public class PlayCardHandler : ICommandHandler
 
     private async Task SendCardPlayedMessages(GameSession session, Player player, Card card, bool shouldEndTurn)
     {
-        // Для карты "Заглянуть в будущее" сообщения уже отправлены в HandleSeeTheFuture
         if (card.Type == CardType.SeeTheFuture)
         {
             return;
         }
 
-        // Для карты "Одолжение" сообщения отправляются в HandleFavor
         if (card.Type == CardType.Favor)
         {
-            // Одолжение отправляет свое сообщение отдельно
             return;
         }
 
-        // Для карты "Нет" сообщения отправляются в HandleNopeCard
         if (card.Type == CardType.Nope)
         {
             return;
         }
 
-        // Для карт "Атаковать" и "Пропустить" уже отправлены сообщения в соответствующих методах
         if (card.Type == CardType.Attack || card.Type == CardType.Skip)
         {
             return;
         }
 
-        // Для карты "Перемешать" уже отправлено сообщение в HandleShuffle
         if (card.Type == CardType.Shuffle)
         {
             return;
         }
 
-        // Для карт котов (комбо) сообщения отправляются в соответствующих методах
         if (card.IsCatCard)
         {
             return;
@@ -243,13 +234,8 @@ public class PlayCardHandler : ICommandHandler
             await session.BroadcastMessage($"⚔️ {player.Name} играет 'Атаковать'!");
         }
 
-        // Уведомляем, что можно играть "Нет"
-        await session.BroadcastMessage($"🚫 Игроки могут сыграть карту НЕТ!");
-        await session.BroadcastMessage($"Используйте команду: nope");
-        await session.BroadcastMessage($"══════════════════════════════════════════");
 
-        // Даем время на реакцию (необязательно, но для UX)
-        await Task.Delay(3000); // 3 секунды для UX
+        await Task.Delay(3000); 
 
         // Проверяем, не отменено ли действие
         if (PlayNopeHandler.IsActionNoped(attackActionId))
@@ -272,7 +258,6 @@ public class PlayCardHandler : ICommandHandler
             return;
         }
 
-        // Завершаем действие (Nope больше нельзя играть)
         PlayNopeHandler.CompleteAction(attackActionId, session.Id);
 
         bool isCounterAttack = player.ExtraTurns > 0;
@@ -370,7 +355,6 @@ public class PlayCardHandler : ICommandHandler
 
         await session.BroadcastMessage($"{player.Name} пропускает ход.");
 
-        // Даем время на Nope
         await Task.Delay(2000);
 
         if (PlayNopeHandler.IsActionNoped(skipActionId))
@@ -378,7 +362,6 @@ public class PlayCardHandler : ICommandHandler
             await session.BroadcastMessage("⚡ Пропуск отменен картой НЕТ!");
             PlayNopeHandler.CompleteAction(skipActionId, session.Id);
 
-            // Сбрасываем флаги TurnManager
             if (session.TurnManager != null)
             {
                 var turnManagerType = typeof(TurnManager);
@@ -413,12 +396,10 @@ public class PlayCardHandler : ICommandHandler
             throw new ArgumentException("Некорректный целевой игрок");
         }
 
-        // Регистрируем действие для Nope
         var favorActionId = Guid.NewGuid();
         PlayNopeHandler.RegisterAttackAction(session.Id, favorActionId, player.Name,
             target.Name, session.CurrentPlayer == player);
 
-        // Даем время на Nope
         await Task.Delay(2000);
 
         if (PlayNopeHandler.IsActionNoped(favorActionId))
@@ -426,7 +407,6 @@ public class PlayCardHandler : ICommandHandler
             await session.BroadcastMessage("⚡ Одолжение отменено картой НЕТ!");
             PlayNopeHandler.CompleteAction(favorActionId, session.Id);
 
-            // Возвращаем карту в руку игрока
             player.AddToHand(card);
             await player.Connection.SendMessage("Одолжение отменено! Карта возвращена в вашу руку.");
             return;
@@ -457,8 +437,8 @@ public class PlayCardHandler : ICommandHandler
 
             await target.Connection.SendPlayerHand(target);
 
-            await target.Connection.SendMessage($"💡 Используйте: favor {session.Id} {target.Id} [номер_карты]");
-            await target.Connection.SendMessage($"📝 Пример: favor {session.Id} {target.Id} 0");
+            await target.Connection.SendMessage($"💡 Используйте: give [номер_карты]");
+            await target.Connection.SendMessage($"📝 Пример: give 0");
             await target.Connection.SendMessage($"⏰ У вас есть 30 секунд на выбор");
             await target.Connection.SendMessage($"══════════════════════════════════════════");
 
@@ -474,7 +454,6 @@ public class PlayCardHandler : ICommandHandler
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Ошибка отправки сообщения цели: {ex.Message}");
             session.PendingFavor = null;
             session.State = GameState.PlayerTurn;
         }
@@ -520,7 +499,6 @@ public class PlayCardHandler : ICommandHandler
         PlayNopeHandler.RegisterAttackAction(session.Id, shuffleActionId, player.Name,
             null, session.CurrentPlayer == player);
 
-        // Даем время на Nope
         await Task.Delay(2000);
 
         if (PlayNopeHandler.IsActionNoped(shuffleActionId))
@@ -528,7 +506,6 @@ public class PlayCardHandler : ICommandHandler
             await session.BroadcastMessage("⚡ Перемешивание отменено картой НЕТ!");
             PlayNopeHandler.CompleteAction(shuffleActionId, session.Id);
 
-            // Возвращаем карту в руку игрока
             player.AddToHand(card);
             await player.Connection.SendMessage("Перемешивание отменено! Карта возвращена в вашу руку.");
             return;
@@ -546,7 +523,6 @@ public class PlayCardHandler : ICommandHandler
         PlayNopeHandler.RegisterAttackAction(session.Id, seeFutureActionId, player.Name,
             null, session.CurrentPlayer == player);
 
-        // Даем время на Nope
         await Task.Delay(2000);
 
         if (PlayNopeHandler.IsActionNoped(seeFutureActionId))
@@ -554,7 +530,6 @@ public class PlayCardHandler : ICommandHandler
             await session.BroadcastMessage("⚡ Заглянуть в будущее отменено картой НЕТ!");
             PlayNopeHandler.CompleteAction(seeFutureActionId, session.Id);
 
-            // Возвращаем карту в руку игрока
             player.AddToHand(card);
             await player.Connection.SendMessage("Заглянуть в будущее отменено! Карта возвращена в вашу руку.");
             return;
@@ -584,10 +559,8 @@ public class PlayCardHandler : ICommandHandler
             message.AppendLine($"{i + 1}. {futureCards[i].Name}");
         }
 
-        // Отправляем результат только игроку, который сыграл карту
         await player.Connection.SendMessage(message.ToString());
 
-        // Остальным игрокам отправляем только факт использования карты
         var broadcastMessage = $"{player.Name} заглянул в будущее.";
         await session.BroadcastToOthers(player, broadcastMessage);
     }
@@ -676,34 +649,21 @@ public class PlayCardHandler : ICommandHandler
     {
         var comboActionId = Guid.NewGuid();
 
-        // Получаем тип первой карты в комбо (это card.Type)
         var firstCardType = card.Type;
 
         PlayNopeHandler.RegisterComboAction(session.Id, comboActionId, player.Name, comboType, firstCardType);
 
-        await session.BroadcastMessage($"══════════════════════════════════════════");
-        await session.BroadcastMessage($"🎭 {player.Name} играет комбо ({comboType} карты)!");
-
-        await session.BroadcastMessage($"🚫 Игроки могут сыграть карту НЕТ!");
-        await session.BroadcastMessage($"Используйте команду: nope");
-        await session.BroadcastMessage($"══════════════════════════════════════════");
-
-        // Даем время на реакцию (необязательно, но для UX)
-        await Task.Delay(3000); // 3 секунды для UX
+        await Task.Delay(3000); 
 
         if (PlayNopeHandler.IsActionNoped(comboActionId))
         {
             await session.BroadcastMessage("⚡ Комбо отменено картой НЕТ!");
             PlayNopeHandler.CompleteAction(comboActionId, session.Id);
 
-            // Возвращаем карты в руку игрока
-            // Для этого нужно знать, какие карты были в комбо
-            // В реальной реализации нужно сохранить индексы карт
             await player.Connection.SendMessage("Комбо отменено! Карты остаются в вашей руке.");
             return;
         }
 
-        // Завершаем действие (Nope больше нельзя играть)
         PlayNopeHandler.CompleteAction(comboActionId, session.Id);
 
         switch (comboType)

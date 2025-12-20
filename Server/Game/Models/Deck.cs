@@ -38,7 +38,9 @@ public class Deck
             ReshuffleDiscard();
 
             if (_drawPile.Count == 0)
+            {
                 throw new InvalidOperationException("Колода полностью пуста");
+            }
         }
 
         return _drawPile.Pop();
@@ -46,7 +48,7 @@ public class Deck
 
     public List<Card> PeekTop(int count)
     {
-        // Берем карты не удаляя их из колоды
+        // Берем карты не удаляяя их из колоды
         return _drawPile.Take(count).ToList();
     }
 
@@ -63,7 +65,9 @@ public class Deck
     public Card TakeFromDiscard(int index)
     {
         if (index < 0 || index >= _discardPile.Count)
+        {
             throw new ArgumentOutOfRangeException(nameof(index));
+        }
 
         var card = _discardPile[index];
         _discardPile.RemoveAt(index);

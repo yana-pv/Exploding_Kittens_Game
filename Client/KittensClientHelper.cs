@@ -59,7 +59,6 @@ public class KittensClientHelper(Socket socket)
 
     public Task SendPlayNope(Guid gameId, Guid playerId, Guid? actionId = null)
     {
-        // Если actionId не указан, отправляем только gameId:playerId
         var payload = actionId.HasValue && actionId.Value != Guid.Empty
             ? Encoding.UTF8.GetBytes($"{gameId}:{playerId}:{actionId.Value}")
             : Encoding.UTF8.GetBytes($"{gameId}:{playerId}");

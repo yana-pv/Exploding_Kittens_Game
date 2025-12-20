@@ -53,13 +53,4 @@ public class GameSessionManager
             _sessions.TryRemove(session.Id, out _);
         }
     }
-
-    public IEnumerable<GameSession> GetWaitingGames()
-    {
-        return _sessions.Values
-            .Where(s => s.State == GameState.WaitingForPlayers &&
-                       s.Players.Count < s.MaxPlayers &&
-                       DateTime.UtcNow - s.CreatedAt < TimeSpan.FromHours(1))
-            .OrderByDescending(s => s.CreatedAt);
-    }
 }

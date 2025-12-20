@@ -4,7 +4,6 @@ namespace Client;
 
 public class GameStateInfo
 {
-    public Guid SessionId { get; set; }
     public GameState State { get; set; }
     public string? CurrentPlayer { get; set; }
     public int AlivePlayers { get; set; }

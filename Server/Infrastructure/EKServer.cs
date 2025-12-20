@@ -54,22 +54,10 @@ public class EKServer
         }
     }
 
-    public async Task StopAsync()
-    {
-        _cancellationTokenSource.Cancel();
-
-        await Task.WhenAll(_clientTasks.Values);
-
-        _serverSocket.Close();
-        Console.WriteLine("Сервер остановлен.");
-    }
-
     private async Task HandleClientAsync(Socket clientSocket)
     {
         try
         {
-            await SendWelcomeMessage(clientSocket);
-
             byte[] buffer = new byte[1024];
 
             while (!_cancellationTokenSource.Token.IsCancellationRequested &&
@@ -110,18 +98,6 @@ public class EKServer
             clientSocket.Close();
             _clientTasks.TryRemove(clientSocket, out _);
         }
-    }
-
-    private async Task SendWelcomeMessage(Socket clientSocket)
-    {
-        var welcomeMessage = "Добро пожаловать в Взрывные Котята!\n" +
-                            "Доступные команды:\n" +
-                            "- create  - создать новую игру\n" +
-                            "- join [ID_игры]  - присоединиться к игре\n" +
-                            "- start  - начать игру\n";
-
-        await clientSocket.SendAsync(KittensPackageBuilder.MessageResponse(welcomeMessage),
-            SocketFlags.None);
     }
 
     private async Task ProcessClientData(Socket clientSocket, byte[] data)

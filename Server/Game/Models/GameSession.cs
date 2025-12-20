@@ -89,7 +89,9 @@ public class GameSession
     public void StartGame()
     {
         if (!CanStart)
+        {
             throw new InvalidOperationException($"Необходимо {MinPlayers}-{MaxPlayers} игроков");
+        }
 
         GameDeck = new Deck();
         CardCounter = new CardCounter();
@@ -193,15 +195,11 @@ public class GameSession
 
         if (player.Connection != null && player.Connection.Connected)
         {
-            try
-            {
-                await player.Connection.SendAsync(data, SocketFlags.None);
-            }
-            catch (Exception ex)
-            {
-            }
+            await player.Connection.SendAsync(data, SocketFlags.None);
+            
         }
     }
+
     private void CheckGameOver()
     {
         var alivePlayers = Players.Where(p => p.IsAlive).ToList();
@@ -215,6 +213,7 @@ public class GameSession
 
             SendLoseMessageToOthers(alivePlayers[0]);
         }
+
         else if (alivePlayers.Count == 0)
         {
             State = GameState.GameOver;

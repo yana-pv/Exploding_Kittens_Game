@@ -30,7 +30,6 @@ public class PlayNopeHandler : ICommandHandler
         var data = Encoding.UTF8.GetString(payload);
         var parts = data.Split(':');
 
-        // НОВЫЙ ФОРМАТ: gameId:playerId (без actionId)
         if (parts.Length < 2 || !Guid.TryParse(parts[0], out var gameId) ||
             !Guid.TryParse(parts[1], out var playerId))
         {
@@ -67,7 +66,6 @@ public class PlayNopeHandler : ICommandHandler
             return;
         }
 
-        // ПРОВЕРКА: Можно ли отменять это действие?
         if (!CanNopeThisAction(actionId.Value))
         {
             await player.Connection.SendMessage($"❌ Карту 'Нет' нельзя сыграть на это действие!");
@@ -98,7 +96,6 @@ public class PlayNopeHandler : ICommandHandler
             }
             _actionNopes[actionId.Value].Add(player);
 
-            // ПОЛУЧАЕМ описание действия по его ID
             var description = GetActionDescription(actionId.Value);
 
             await session.BroadcastMessage($"🚫 {player.Name} сказал НЕТ на: {description}");
@@ -122,7 +119,7 @@ public class PlayNopeHandler : ICommandHandler
     {
         if (!_actionCardTypes.TryGetValue(actionId, out var cardType))
         {
-            return true; // Если тип неизвестен, разрешаем по умолчанию
+            return true; 
         }
 
         // НЕЛЬЗЯ отменять:
@@ -147,7 +144,7 @@ public class PlayNopeHandler : ICommandHandler
                 return true;
 
             default:
-                return true; // По умолчанию разрешаем
+                return true; 
         }
     }
 
@@ -159,13 +156,11 @@ public class PlayNopeHandler : ICommandHandler
         {
             await session.BroadcastMessage("⚡ Атака отменена картой НЕТ!");
 
-            // Сбрасываем флаги TurnManager
             if (session.TurnManager != null)
             {
                 ResetTurnManagerFlagsStatic(session.TurnManager);
             }
 
-            // Возвращаем игру в нормальное состояние
             if (session.State == GameState.ResolvingAction)
             {
                 session.State = GameState.PlayerTurn;
@@ -196,11 +191,9 @@ public class PlayNopeHandler : ICommandHandler
             await session.BroadcastMessage($"⚡ Действие '{description}' отменено картой НЕТ!");
         }
 
-        // Завершаем действие
         CompleteAction(actionId, session.Id);
     }
 
-    // Статический метод для сброса флагов TurnManager
     private static void ResetTurnManagerFlagsStatic(TurnManager turnManager)
     {
         if (turnManager == null) return;
@@ -252,7 +245,7 @@ public class PlayNopeHandler : ICommandHandler
         _actionTimestamps[actionId] = DateTime.UtcNow;
         _sessionActiveAction[sessionId] = actionId;
         _isCurrentPlayerAction[actionId] = isCurrentPlayer;
-        _actionCardTypes[actionId] = cardType; // Сохраняем тип карты
+        _actionCardTypes[actionId] = cardType; 
     }
 
     public static void RegisterComboAction(Guid sessionId, Guid actionId, string playerName,
@@ -263,7 +256,7 @@ public class PlayNopeHandler : ICommandHandler
         _actionDescriptions[actionId] = description;
         _actionTimestamps[actionId] = DateTime.UtcNow;
         _sessionActiveAction[sessionId] = actionId;
-        _actionCardTypes[actionId] = firstCardType; // Тип первой карты в комбо
+        _actionCardTypes[actionId] = firstCardType;
     }
 
     public static void CleanupAction(Guid actionId, Guid sessionId)
@@ -272,7 +265,7 @@ public class PlayNopeHandler : ICommandHandler
         _actionTimestamps.TryRemove(actionId, out _);
         _actionNopes.TryRemove(actionId, out _);
         _isCurrentPlayerAction.TryRemove(actionId, out _);
-        _actionCardTypes.TryRemove(actionId, out _); // Очищаем тип карты
+        _actionCardTypes.TryRemove(actionId, out _);
 
         if (_sessionActiveAction.TryGetValue(sessionId, out var activeId) && activeId == actionId)
         {
@@ -291,13 +284,11 @@ public class PlayNopeHandler : ICommandHandler
 
     public static bool CanPlayNopeOnAction(Guid actionId, bool isCurrentPlayer)
     {
-        // Просто проверяем, существует ли действие
         return _actionDescriptions.ContainsKey(actionId);
     }
 
     public static bool IsActionStillActive(Guid actionId)
     {
-        // Действие активно, пока оно есть в словаре
         return _actionDescriptions.ContainsKey(actionId);
     }
 
@@ -328,14 +319,12 @@ public class PlayNopeHandler : ICommandHandler
         // Получаем самое последнее действие для этой сессии
         if (_sessionActiveAction.TryGetValue(sessionId, out var actionId))
         {
-            // Проверяем, что действие еще активно
             if (IsActionStillActive(actionId))
             {
                 return actionId;
             }
             else
             {
-                // Действие завершено, удаляем его
                 _sessionActiveAction.TryRemove(sessionId, out _);
             }
         }

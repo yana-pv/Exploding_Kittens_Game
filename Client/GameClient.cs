@@ -10,7 +10,6 @@ namespace Client;
 
 public class GameClient
 {
-    // Свойства состояния
     public Guid? SessionId { get; set; }
     public Guid PlayerId { get; set; }
     public List<Card> Hand { get; } = new();
@@ -20,7 +19,6 @@ public class GameClient
     public GameState CurrentGameState { get; set; }
     public List<string> GameLog { get; } = new();
 
-    // Зависимости
     private readonly Socket _socket;
     private readonly KittensClientHelper _helper;
     private readonly ClientCommandHandlerFactory _handlerFactory;
@@ -28,7 +26,6 @@ public class GameClient
     private readonly GameConsoleRenderer _renderer;
     private readonly GameMessageListener _listener;
 
-    // Приватные поля
     private readonly CancellationTokenSource _cts = new();
     private Task? _listenerTask;
     private readonly List<byte> _receiveBuffer = new();
@@ -56,15 +53,12 @@ public class GameClient
         PlayerName = Console.ReadLine()?.Trim() ?? "Игрок";
         Console.WriteLine();
 
-        // Запрашиваем список игр
         PrintInfo("🔍 Ищу доступные игры...");
         await _helper.SendGetAvailableGames();
         await Task.Delay(500);
 
-        // Запускаем слушатель сообщений
         _listenerTask = Task.Run(() => _listener.ListenForServerMessages(_cts.Token), _cts.Token);
 
-        // Основной цикл
         await GameLoop();
     }
 
@@ -106,7 +100,6 @@ public class GameClient
         await _commandProcessor.ProcessCommand(input);
     }
 
-    // Делегированные методы для взаимодействия с UI
     public void DisplayHand() => _renderer.DisplayHand();
     public void DisplayPlayers() => _renderer.DisplayPlayers();
     public void DisplayHelp() => _renderer.DisplayHelp();
@@ -118,7 +111,6 @@ public class GameClient
         _renderer.SetAvailableGames(games);
     }
 
-    // Вспомогательные методы
     public void AddToLog(string message)
     {
         var timestamp = DateTime.Now.ToString("HH:mm:ss");
@@ -127,7 +119,6 @@ public class GameClient
         if (GameLog.Count > 50)
             GameLog.RemoveAt(0);
 
-        // Определяем цвет сообщения
         ConsoleColor color = ConsoleColor.Gray;
         if (message.Contains("💥") || message.Contains("❌") || message.Contains("Ошибка"))
             color = ConsoleColor.Red;
@@ -213,10 +204,6 @@ public class GameClient
         }
 
         var selectedPlayer = alivePlayers[choice - 1];
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"\n✅ Вы выбрали: {selectedPlayer.Name}");
-        Console.ResetColor();
 
         return selectedPlayer;
     }

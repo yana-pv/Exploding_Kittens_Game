@@ -97,12 +97,6 @@ public class UseComboHandler : ICommandHandler
 
             _comboActions[comboActionId] = comboAction;
 
-            await session.BroadcastMessage($"══════════════════════════════════════════");
-            await session.BroadcastMessage($"🎭 {player.Name} играет комбо ({comboType} карты)!");
-            await session.BroadcastMessage($"🚫 У вас есть 5 секунд чтобы сыграть карту НЕТ!");
-            await session.BroadcastMessage($"Используйте: nope {session.Id} [ваш_ID] {comboActionId}");
-            await session.BroadcastMessage($"══════════════════════════════════════════");
-
             await Task.Delay(5000);
 
             if (IsComboActionNoped(comboActionId))
@@ -374,23 +368,18 @@ public class UseComboHandler : ICommandHandler
 
         var stolenCard = target.Hand[stolenCardIndex];
 
-        // 1. Сначала сбрасываем карты комбо
         DiscardComboCards(session, player, cardIndices);
 
-        // 2. Затем забираем карту у цели
         target.Hand.RemoveAt(stolenCardIndex);
 
-        // 3. Добавляем карту игроку
         player.AddToHand(stolenCard);
 
         var timeoutMsg = isTimeout ? " (таймаут)" : "";
         await session.BroadcastMessage($"🎭 {player.Name} украл карту '{stolenCard.Name}' у {target.Name} используя Слепой Карманник!{timeoutMsg}");
 
-        // Обновляем руки обоих игроков
         await target.Connection.SendPlayerHand(target);
         await player.Connection.SendPlayerHand(player);
 
-        // Завершаем ход после комбо
         await CompleteComboTurn(session, player);
 
         await session.BroadcastGameState();
@@ -403,11 +392,9 @@ public class UseComboHandler : ICommandHandler
             await player.Connection.SendMessage("🎭 Комбо завершено! Вы можете продолжить ход:");
             await player.Connection.SendMessage("• Сыграть еще карту (play [номер])");
             await player.Connection.SendMessage("• Взять карту из колоды (draw)");
-            await player.Connection.SendMessage("• Завершить ход (end)");
         }
     }
 
-    // Метод для проверки, отменено ли комбо Нетом
     private bool IsComboActionNoped(Guid comboActionId)
     {
         return false;

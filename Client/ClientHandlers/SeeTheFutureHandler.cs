@@ -10,10 +10,8 @@ public class SeeTheFutureHandler : IClientCommandHandler
     {
         var data = Encoding.UTF8.GetString(payload);
 
-        // Проверяем, это ли сообщение о "Заглянуть в будущее"
         if (data.Contains("Заглянуть в будущее"))
         {
-            // Разбираем сообщение с картами
             var lines = data.Split('\n');
             var futureCards = new List<string>();
 
@@ -36,7 +34,6 @@ public class SeeTheFutureHandler : IClientCommandHandler
         }
         else
         {
-            // Обычное сообщение о сыгранной карте
             client.AddToLog($"Карта сыграна: {data}");
         }
 

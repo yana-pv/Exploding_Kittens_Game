@@ -94,11 +94,11 @@ public class GameCommandProcessor
         if (parts.Length < 2)
         {
             Console.WriteLine("📝 Использование:");
-            Console.WriteLine("  1. По номеру: join [номер_игры] [имя]");
-            Console.WriteLine("     Пример: join 1 Иван");
+            Console.WriteLine("  1. По номеру: join [номер_игры]");
+            Console.WriteLine("     Пример: join 1");
             Console.WriteLine();
-            Console.WriteLine("  2. По ID: join [ID_игры] [имя]");
-            Console.WriteLine("     Пример: join 550e8400-e29b-41d4-a716-446655440000 Иван");
+            Console.WriteLine("  2. По ID: join [ID_игры]");
+            Console.WriteLine("     Пример: join 550e8400-e29b-41d4-a716-446655440000");
             Console.WriteLine();
             Console.WriteLine("💡 Сначала посмотрите список игр командой 'games'");
             return;
@@ -204,7 +204,6 @@ public class GameCommandProcessor
 
         var card = _client.Hand[cardIndex];
 
-        // Особый случай: карта "Одолжение" (Favor)
         if (card.Type == CardType.Favor)
         {
             await HandleFavorCard(cardIndex);
@@ -232,7 +231,7 @@ public class GameCommandProcessor
     {
         Console.ForegroundColor = ConsoleColor.Magenta;
         Console.WriteLine("\n╔══════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                     🎭 ОДОЛЖЕНИЕ 🎭                      ║");
+        Console.WriteLine("║                     🎭 ОДОЛЖЕНИЕ 🎭                         ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.ResetColor();
 
@@ -380,8 +379,8 @@ public class GameCommandProcessor
 
         if (parts.Length < 4)
         {
-            Console.WriteLine("📝 Использование: favor [ID_игры] [ваш_ID] [номер_карты]");
-            Console.WriteLine($"💡 Пример: favor {_client.SessionId.Value} {_client.PlayerId} 0");
+            Console.WriteLine("📝 Использование: give [номер_карты]");
+            Console.WriteLine($"💡 Пример: give 0");
             return;
         }
 

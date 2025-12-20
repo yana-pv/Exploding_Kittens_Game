@@ -20,13 +20,8 @@ public class PlayerHandUpdateHandler : IClientCommandHandler
 
                 client.Hand.Clear();
                 client.Hand.AddRange(clientSideCards);
-
-                // Сразу показываем руку при обновлении
-                Console.WriteLine(); // Пустая строка для разделения
+                Console.WriteLine(); 
                 client.DisplayHand();
-
-                // Также показываем краткую информацию
-                client.AddToLog($"🃏 Рука обновлена. Карт: {client.Hand.Count}");
             }
         }
         catch (JsonException ex)

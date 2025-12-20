@@ -20,17 +20,14 @@ public class GameStateUpdateHandler : IClientCommandHandler
             var state = JsonSerializer.Deserialize<GameStateInfo>(json, options);
             if (state != null)
             {
-                // 1. Обновляем текущее состояние игры
                 client.CurrentGameState = state.State;
 
-                // 2. Обновляем список игроков (если сервер отправляет)
                 if (state.Players != null && state.Players.Count > 0)
                 {
                     client.OtherPlayers.Clear();
                     client.OtherPlayers.AddRange(state.Players);
                 }
 
-                // 3. Обрабатываем текущего игрока
                 if (!string.IsNullOrEmpty(state.CurrentPlayer))
                 {
                     var isMyTurn = state.CurrentPlayer == client.PlayerName;
@@ -42,13 +39,12 @@ public class GameStateUpdateHandler : IClientCommandHandler
                     }
                 }
 
-                // 4. Обрабатываем победителя (если сервер отправляет)
                 if (!string.IsNullOrEmpty(state.Winner))
                 {
                     if (state.Winner == client.PlayerName)
                     {
                         client.AddToLog("🎉 ПОБЕДА! Вы выиграли игру!");
-                        client.SessionId = null; // Сбрасываем сессию при победе
+                        client.SessionId = null; 
                     }
                     else
                     {
@@ -56,11 +52,9 @@ public class GameStateUpdateHandler : IClientCommandHandler
                     }
                 }
 
-                // 5. Выводим дополнительную информацию
                 client.AddToLog($"Игроков в игре: {state.AlivePlayers}");
                 client.AddToLog($"Карт в колоде: {state.CardsInDeck}");
 
-                // 6. Выводим информацию о ходе (если сервер отправляет)
                 if (state.TurnsPlayed > 0)
                 {
                     client.AddToLog($"Ходов сыграно: {state.TurnsPlayed}");

@@ -27,7 +27,10 @@ public class Player
     {
         var card = Hand.FirstOrDefault(c => c.Type == type);
         if (card != null)
+        {
             Hand.Remove(card);
+        }
+
         return card!;
     }
 

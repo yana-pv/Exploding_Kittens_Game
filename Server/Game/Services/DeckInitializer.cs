@@ -7,11 +7,13 @@ public class DeckInitializer
     public static (List<Card> deck, List<List<Card>> playerHands) CreateGameSetup(int playerCount)
     {
         if (playerCount < 2 || playerCount > 5)
+        {
             throw new ArgumentException("Поддерживается 2-5 игроков");
+        }
 
         var random = new Random();
 
-        // Создаем колоду БЕЗ Взрывных Котят и Обезвредить
+        // Создаем колоду без Взрывных Котят и Обезвредить
         var deckWithoutExplosives = new List<Card>();
 
         AddCards(deckWithoutExplosives, CardType.Nope, 5);

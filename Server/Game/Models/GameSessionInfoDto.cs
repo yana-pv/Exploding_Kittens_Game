@@ -10,5 +10,4 @@ public class GameSessionInfoDto
     public int MaxPlayers { get; set; }
     public GameState State { get; set; }
     public DateTime CreatedAt { get; set; }
-    public TimeSpan TimeSinceCreation => DateTime.UtcNow - CreatedAt;
 }

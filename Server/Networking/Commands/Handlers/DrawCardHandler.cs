@@ -53,7 +53,6 @@ public class DrawCardHandler : ICommandHandler
             var drawnCard = session.GameDeck.Draw();
             await session.BroadcastMessage($"{player.Name} берет карту из колоды.");
 
-            // ВАЖНО: Сначала добавляем карту в руку!
             player.AddToHand(drawnCard);
 
             session.TurnManager.CardDrawn();
@@ -78,6 +77,7 @@ public class DrawCardHandler : ICommandHandler
 
             await session.BroadcastGameState();
         }
+
         catch (Exception ex)
         {
             await sender.SendMessage($"Ошибка при взятии карты: {ex.Message}");
@@ -88,11 +88,8 @@ public class DrawCardHandler : ICommandHandler
     {
         await session.BroadcastMessage($"💥 {player.Name} вытащил Взрывного Котенка!");
 
-        Console.WriteLine($"DEBUG DrawCardHandler: У игрока {player.Name} есть Обезвредить? {player.HasDefuseCard}");
-
         if (player.HasDefuseCard)
         {
-            Console.WriteLine($"DEBUG DrawCardHandler: Вызываем RegisterExplosion для {player.Name}");
             PlayDefuseHandler.RegisterExplosion(session, player);
 
             await SendDefuseInstructions(player, session);

@@ -12,7 +12,6 @@ public class PlayerEliminatedHandler : IClientCommandHandler
 
         if (playerName == client.PlayerName)
         {
-            client.AddToLog("💥 Вы выбыли из игры!");
             client.Hand.Clear();
         }
         else

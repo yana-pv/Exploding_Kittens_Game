@@ -40,9 +40,5 @@ public class CreateGameHandler : ICommandHandler
 
         await sender.SendAsync(KittensPackageBuilder.CreateGameResponse(session.Id, player.Id),
             SocketFlags.None);
-
-        await sender.SendMessage($"Игра создана! ID: {session.Id}");
-        await sender.SendMessage($"Вы вошли как: {playerName}");
-        await sender.SendMessage($"Ожидание игроков ({session.MinPlayers}-{session.MaxPlayers})...");
     }
 }
