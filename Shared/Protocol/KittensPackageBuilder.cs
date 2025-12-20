@@ -10,8 +10,10 @@ public class KittensPackageBuilder
 
     public KittensPackageBuilder(byte[] content, Command command)
     {
-        if (content.Length > KittensPackageMeta.MaxPayloadSize) 
+        if (content.Length > KittensPackageMeta.MaxPayloadSize)
+        {
             throw new ArgumentException($"Payload exceeds {KittensPackageMeta.MaxPayloadSize} bytes");
+        }
 
         _package = new byte[1 + 1 + KittensPackageMeta.LengthSize + content.Length + 1];
         CreatePackage(content, command);
@@ -82,49 +84,6 @@ public class KittensPackageBuilder
     public static byte[] GameStateResponse(string gameStateJson)
     {
         var bytes = Encoding.UTF8.GetBytes(gameStateJson);
-
-        if (bytes.Length > KittensPackageMeta.MaxPayloadSize) 
-        {
-            var originalBytes = bytes;
-            var maxLen = KittensPackageMeta.MaxPayloadSize;
-            if (originalBytes.Length > maxLen)
-            {
-                var truncatedSlice = originalBytes.AsSpan(0, maxLen);
-
-                var decoder = Encoding.UTF8.GetDecoder();
-                var charCount = decoder.GetCharCount(originalBytes, 0, maxLen, true); 
-                string safeTruncatedString;
-                try
-                {
-                    safeTruncatedString = Encoding.UTF8.GetString(originalBytes, 0, maxLen);
-                }
-                catch (ArgumentException)
-                {
-                    safeTruncatedString = null; 
-                }
-
-                int safeLen = maxLen;
-                while (safeLen > 0)
-                {
-                    var testSlice = originalBytes.AsSpan(0, safeLen);
-                    var testString = Encoding.UTF8.GetString(testSlice);
-                    var testBytes = Encoding.UTF8.GetBytes(testString);
-                    if (testBytes.Length <= maxLen)
-                    {
-                        bytes = testBytes;
-                        break;
-                    }
-
-                    safeLen--;
-                }
-
-                if (safeLen == 0)
-                {
-                    var minimalJson = "{}";
-                    bytes = Encoding.UTF8.GetBytes(minimalJson);
-                }
-            }
-        }
 
         return new KittensPackageBuilder(bytes, Command.GameStateUpdate).Build();
     }

@@ -9,7 +9,7 @@ public class GameInfo
     public string CreatorName { get; set; } = string.Empty;
     public int PlayersCount { get; set; }
     public int MaxPlayers { get; set; }
-    public GameState State { get; set; }  // Изменено с string на GameState
+    public GameState State { get; set; }  
     public DateTime CreatedAt { get; set; }
     public TimeSpan TimeSinceCreation => DateTime.UtcNow - CreatedAt;
 
@@ -26,7 +26,6 @@ public class GameInfo
             GameState.WaitingForNope => "⏸️ Ожидание НЕТ",
             GameState.ResolvingAction => "⚡ Разрешение действия",
             GameState.GameOver => "🏁 Игра окончена",
-            GameState.Paused => "⏸️ На паузе",
             _ => state.ToString()
         };
     }

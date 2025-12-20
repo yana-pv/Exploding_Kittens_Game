@@ -1,5 +1,4 @@
-﻿using Server.Game.Models;
-using Shared.Models;
+﻿using Shared.Models;
 
 namespace Server.Game.Models.Actions;
 

@@ -31,21 +31,17 @@ public static class KittensPackageParser
 
         var command = (Command)commandByte;
 
-        // Читаем длину как ushort (2 байта, Little Endian)
         ushort length = (ushort)(data[KittensPackageMeta.LengthByteIndex] | (data[KittensPackageMeta.LengthByteIndex + 1] << 8));
 
         // Ожидаемая длина пакета: START + CMD + LEN_SIZE + PAYLOAD + END
         int expectedTotalLength = 1 + 1 + KittensPackageMeta.LengthSize + length + 1;
 
-        if (length + 4 != data.Length - 1) // -1 потому что data.Length включает END_BYTE
+        if (expectedTotalLength != data.Length)
         {
-            if (expectedTotalLength != data.Length)
-            {
-                error = CommandResponse.InvalidAction;
-                return null;
-            }
+            error = CommandResponse.InvalidAction;
+            return null;
         }
-
+       
         var payload = length > 0
             ? data.Slice(KittensPackageMeta.PayloadStartIndex, length).ToArray()
             : Array.Empty<byte>();

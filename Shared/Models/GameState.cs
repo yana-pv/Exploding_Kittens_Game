@@ -8,5 +8,4 @@ public enum GameState
     WaitingForNope,       // Ожидание карт Nope
     ResolvingAction,      // Разрешение действия карты
     GameOver,             // Игра окончена
-    Paused                // Игра на паузе
 }

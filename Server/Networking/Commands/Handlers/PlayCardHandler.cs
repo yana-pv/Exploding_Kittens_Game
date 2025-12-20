@@ -5,7 +5,6 @@ using Server.Infrastructure;
 using Shared.Models;
 using System.Net.Sockets;
 using System.Text;
-using static Server.Game.Models.GameSession;
 
 namespace Server.Networking.Commands.Handlers;
 

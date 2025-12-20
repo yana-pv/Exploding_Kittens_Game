@@ -107,7 +107,7 @@ public class Card
                 Description = "Карта кота для комбо",
                 IconId = 12
             },
-            _ => throw new ArgumentException($"Unknown card type: {type}")
+            _ => throw new ArgumentException($"Неверный тип карты: {type}")
         };
     }
 }
